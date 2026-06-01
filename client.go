@@ -5,8 +5,6 @@ import (
 	"io"
 	"iter"
 	"sync"
-
-	"github.com/shindakun/agent-sdk-go/internal/protocol"
 )
 
 // Result pairs a streamed [Message] with a terminal error. Exactly one is set:
@@ -54,7 +52,7 @@ func (c *Client) Connect(ctx context.Context) error {
 	}
 
 	sess := newSession(c.opts)
-	if err := sess.connect(ctx, c.inboundHandler()); err != nil {
+	if err := sess.connect(ctx); err != nil {
 		return err
 	}
 	c.sess = sess
@@ -62,12 +60,6 @@ func (c *Client) Connect(ctx context.Context) error {
 	c.done = make(chan struct{})
 
 	go c.readLoop()
-	return nil
-}
-
-// inboundHandler returns the control-request handler for permissions/hooks/MCP.
-// In M2 it is nil; M3/M4 install the dispatcher.
-func (c *Client) inboundHandler() protocol.InboundHandler {
 	return nil
 }
 

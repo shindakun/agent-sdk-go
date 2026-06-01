@@ -26,16 +26,17 @@ type session struct {
 	// message. Until then prompts use the "default" session id, matching the
 	// official SDKs.
 	sessionID string
+	registry  *callbackRegistry
 }
 
 func newSession(opts *Options) *session {
-	return &session{opts: opts}
+	return &session{opts: opts, registry: newCallbackRegistry()}
 }
 
 // connect spawns the CLI, starts the protocol engine, and performs the
-// initialize handshake. handler services inbound control requests and may be
-// nil.
-func (s *session) connect(ctx context.Context, handler protocol.InboundHandler) error {
+// initialize handshake. Inbound control requests (permissions, hooks, MCP) are
+// serviced by the handler the session builds from its options.
+func (s *session) connect(ctx context.Context) error {
 	args, err := s.opts.buildArgs()
 	if err != nil {
 		return err
@@ -53,13 +54,16 @@ func (s *session) connect(ctx context.Context, handler protocol.InboundHandler) 
 		return mapTransportError(err)
 	}
 
-	s.engine = protocol.NewEngine(s.t, handler)
-	s.engine.Start()
-
-	init, err := s.opts.buildInitializeRequest()
+	// Build the initialize request first so hook callbacks are registered in
+	// the registry before the inbound handler closes over it.
+	init, err := s.opts.buildInitializeRequest(s.registry)
 	if err != nil {
 		return err
 	}
+
+	s.engine = protocol.NewEngine(s.t, s.inboundHandler())
+	s.engine.Start()
+
 	if _, err := s.engine.Initialize(ctx, init, 0); err != nil {
 		_ = s.t.Close()
 		return &ConnectionError{Err: err}

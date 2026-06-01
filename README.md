@@ -57,7 +57,9 @@ Built milestone-by-milestone against the verified official wire protocol.
       `Interrupt` / `SetModel` / `SetPermissionMode` / `GetContextUsage` /
       `Mcp*` / `StopTask`; session-id capture and reuse; `Query` now runs on top
       of `Client`.
-- [ ] **M3 — Permissions + hooks:** `CanUseTool` and lifecycle hooks.
+- [x] **M3 — Permissions + hooks:** `CanUseTool` (allow with `updatedInput` /
+      deny with `interrupt`) and lifecycle hooks (callback-id registration in
+      the initialize handshake, `hook_callback` dispatch).
 - [ ] **M4 — In-process SDK MCP tools:** define Go tools the agent can call.
 - [ ] **M5 — Full parity + examples.**
 

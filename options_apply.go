@@ -108,12 +108,12 @@ func (o *Options) buildArgs() ([]string, error) {
 }
 
 // buildInitializeRequest assembles the SDK->CLI initialize handshake payload.
-// Hooks are serialized in M3; agents and skills are serialized here as the CLI
-// expects them.
-func (o *Options) buildInitializeRequest() (protocol.InitializeRequest, error) {
+// The registry registers hook callbacks and yields the hooks config; agents and
+// skills are serialized here as the CLI expects them.
+func (o *Options) buildInitializeRequest(reg *callbackRegistry) (protocol.InitializeRequest, error) {
 	var req protocol.InitializeRequest
 
-	hooks, err := o.buildHooksConfig()
+	hooks, err := reg.build(o)
 	if err != nil {
 		return req, err
 	}
@@ -138,12 +138,6 @@ func (o *Options) buildInitializeRequest() (protocol.InitializeRequest, error) {
 		req.ExcludeDynamicSections = &v
 	}
 	return req, nil
-}
-
-// buildHooksConfig is a placeholder until M3 wires hook callback registration.
-// It returns nil so no hooks are advertised.
-func (o *Options) buildHooksConfig() (json.RawMessage, error) {
-	return nil, nil
 }
 
 // buildMcpConfig serializes the configured MCP servers into the JSON blob the

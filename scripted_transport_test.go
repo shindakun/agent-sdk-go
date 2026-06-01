@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"sync"
+	"time"
 
 	"github.com/shindakun/agent-sdk-go/internal/transport"
 )
@@ -236,6 +237,43 @@ func (s *interactiveTransport) writtenLines() [][]byte {
 	out := make([][]byte, len(s.writes))
 	copy(out, s.writes)
 	return out
+}
+
+// sendInbound injects a CLI->SDK control_request and blocks until the SDK's
+// control_response for it is written, returning the response's "response"
+// payload (or an error string if the SDK answered with subtype "error").
+func (s *interactiveTransport) sendInbound(t interface{ Fatalf(string, ...any) }, requestID, subtype string, extra map[string]any) (json.RawMessage, string) {
+	req := map[string]any{"subtype": subtype}
+	for k, v := range extra {
+		req[k] = v
+	}
+	env := map[string]any{"type": "control_request", "request_id": requestID, "request": req}
+	b, _ := json.Marshal(env)
+	s.send(transport.RawLine{Data: b})
+
+	// Poll the written lines for the matching control_response.
+	for i := 0; i < 200; i++ {
+		for _, l := range s.writtenLines() {
+			var resp struct {
+				Type     string `json:"type"`
+				Response struct {
+					Subtype   string          `json:"subtype"`
+					RequestID string          `json:"request_id"`
+					Response  json.RawMessage `json:"response"`
+					Error     string          `json:"error"`
+				} `json:"response"`
+			}
+			if json.Unmarshal(l, &resp) != nil || resp.Type != "control_response" {
+				continue
+			}
+			if resp.Response.RequestID == requestID {
+				return resp.Response.Response, resp.Response.Error
+			}
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("no control_response for request %q (subtype %q)", requestID, subtype)
+	return nil, ""
 }
 
 func installInteractive(st *interactiveTransport) func() {
