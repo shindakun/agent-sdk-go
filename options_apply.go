@@ -55,8 +55,12 @@ func (o *Options) buildArgs() ([]string, error) {
 		}
 	}
 
-	if o.settings != "" {
-		args = append(args, "--settings", o.settings)
+	settings, err := o.buildSettings()
+	if err != nil {
+		return nil, err
+	}
+	if settings != "" {
+		args = append(args, "--settings", settings)
 	}
 	for _, dir := range o.addDirs {
 		args = append(args, "--add-dir", dir)
@@ -117,6 +121,36 @@ func (o *Options) buildArgs() ([]string, error) {
 	}
 
 	return args, nil
+}
+
+// buildSettings returns the value for --settings. When a sandbox is configured,
+// it is merged into the settings object; if the user-supplied settings is a file
+// path (not JSON), the sandbox is wrapped into a fresh settings object alongside
+// an "extends" pointer so the file still loads.
+func (o *Options) buildSettings() (string, error) {
+	if o.sandbox == nil {
+		return o.settings, nil
+	}
+
+	merged := map[string]any{}
+	if o.settings != "" {
+		// Try to parse existing settings as inline JSON; if it isn't JSON treat
+		// it as a file path the CLI should still load via "extends".
+		if json.Valid([]byte(o.settings)) {
+			if err := json.Unmarshal([]byte(o.settings), &merged); err != nil {
+				return "", err
+			}
+		} else {
+			merged["extends"] = o.settings
+		}
+	}
+	merged["sandbox"] = o.sandbox
+
+	b, err := json.Marshal(merged)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
 // buildInitializeRequest assembles the SDK->CLI initialize handshake payload.

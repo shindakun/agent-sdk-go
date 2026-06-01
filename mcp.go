@@ -34,10 +34,34 @@ type SSEMcpServer struct {
 func (SSEMcpServer) isMcpServerConfig() {}
 
 // AgentDefinition declares a subagent the main agent can delegate to via the
-// Agent tool.
+// Agent tool. Wire keys use the camelCase the CLI expects.
 type AgentDefinition struct {
-	Description string   `json:"description"`
-	Prompt      string   `json:"prompt"`
-	Tools       []string `json:"tools,omitempty"`
-	Model       string   `json:"model,omitempty"`
+	Description     string   `json:"description"`
+	Prompt          string   `json:"prompt"`
+	Tools           []string `json:"tools,omitempty"`
+	DisallowedTools []string `json:"disallowedTools,omitempty"`
+	Model           string   `json:"model,omitempty"`
+	Skills          []string `json:"skills,omitempty"`
+	Memory          string   `json:"memory,omitempty"` // "user" | "project" | "local"
+	MCPServers      []string `json:"mcpServers,omitempty"`
+	InitialPrompt   string   `json:"initialPrompt,omitempty"`
+	MaxTurns        int      `json:"maxTurns,omitempty"`
+	Background      bool     `json:"background,omitempty"`
+	Effort          string   `json:"effort,omitempty"`
+	PermissionMode  string   `json:"permissionMode,omitempty"`
+}
+
+// SettingSource names a filesystem settings source the CLI may load.
+type SettingSource string
+
+const (
+	SettingSourceUser    SettingSource = "user"
+	SettingSourceProject SettingSource = "project"
+	SettingSourceLocal   SettingSource = "local"
+)
+
+// SdkPluginConfig configures a local plugin directory.
+type SdkPluginConfig struct {
+	Type string `json:"type"` // always "local"
+	Path string `json:"path"`
 }

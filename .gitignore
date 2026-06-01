@@ -4,6 +4,16 @@
 /dist/
 /bin/
 
+# Compiled example binaries accidentally built in-tree (named after the example
+# package dir, e.g. `go build ./examples/customtool/` -> ./customtool)
+/customtool
+/query
+/interactive
+/options
+/hooks
+/permission
+/sessions
+
 # Editor / OS
 .DS_Store
 *.swp

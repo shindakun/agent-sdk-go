@@ -131,6 +131,7 @@ Registered via `WithSDKMCPServer(name, server)`. On `mcp_message`, do **manual J
 3. **Permissions + hooks:** `CanUseTool` + `can_use_tool` dispatch; hook events/matchers/callback-ID registration + `hook_callback` dispatch. Exit: PreToolUse hook blocks a tool; CanUseTool allows/denies with updatedInput.
 4. **In-process SDK MCP:** Tool/NewTool[T]/SdkMcpServer/WithSDKMCPServer; `mcp_message` JSONRPC dispatch. Exit: a Go-defined tool is listed and called end-to-end.
 5. **Full parity + polish:** remaining flags (fallback-model, betas, thinking/effort, budget, settings, add-dir, plugins, json-schema, agents, skills, external MCP, resume/fork, extra-args); remaining control requests (mcp_status/reconnect/toggle, rewind_files, stop_task, task_notification, partial/stream events, session_state_changed, transcript_mirror); examples, docs, README, CHANGELOG, integration suite. Exit: parity checklist met; `go test -race ./...` green.
+6. **Wider parity:** on-disk session reading (`ListSessions`/`GetSessionInfo`/`GetSessionMessages`/`ListSubagents`/`GetSubagentMessages`, reading `~/.claude/projects/<sanitized-cwd>/<id>.jsonl` with the official path-sanitization); typed hook inputs (`Decode*` over the raw payload); typed `TaskNotification` + `TaskUsage`; full `AgentDefinition` field set; `SettingSource`, `SdkPluginConfig`; four more examples. Deferred: session mutations/store, sandbox/rate-limit types, task started/progress messages — tracked in PARITY.md.
 
 ## Verification
 

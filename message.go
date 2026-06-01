@@ -90,9 +90,51 @@ type StreamEvent struct {
 
 func (*StreamEvent) isMessage() {}
 
-// TaskNotification reports task status updates from the CLI.
+// TaskUsage summarizes resource use for a task.
+type TaskUsage struct {
+	TotalTokens int `json:"total_tokens"`
+	ToolUses    int `json:"tool_uses"`
+	DurationMs  int `json:"duration_ms"`
+}
+
+// TaskStartedMessage reports that a (sub)task has started.
+type TaskStartedMessage struct {
+	TaskID      string `json:"task_id"`
+	Description string `json:"description"`
+	UUID        string `json:"uuid"`
+	SessionID   string `json:"session_id"`
+	ToolUseID   string `json:"tool_use_id,omitempty"`
+	TaskType    string `json:"task_type,omitempty"`
+	Raw         json.RawMessage
+}
+
+func (*TaskStartedMessage) isMessage() {}
+
+// TaskProgressMessage reports incremental progress for a running task.
+type TaskProgressMessage struct {
+	TaskID       string    `json:"task_id"`
+	Description  string    `json:"description"`
+	Usage        TaskUsage `json:"usage"`
+	UUID         string    `json:"uuid"`
+	SessionID    string    `json:"session_id"`
+	ToolUseID    string    `json:"tool_use_id,omitempty"`
+	LastToolName string    `json:"last_tool_name,omitempty"`
+	Raw          json.RawMessage
+}
+
+func (*TaskProgressMessage) isMessage() {}
+
+// TaskNotification reports a task status update from the CLI. Typed fields are
+// populated where present; Raw holds the full payload.
 type TaskNotification struct {
-	Raw json.RawMessage
+	TaskID     string     `json:"task_id"`
+	Status     string     `json:"status"` // "completed" | "failed" | "stopped"
+	Summary    string     `json:"summary"`
+	OutputFile string     `json:"output_file"`
+	SessionID  string     `json:"session_id"`
+	ToolUseID  string     `json:"tool_use_id,omitempty"`
+	Usage      *TaskUsage `json:"usage,omitempty"`
+	Raw        json.RawMessage
 }
 
 func (*TaskNotification) isMessage() {}

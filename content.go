@@ -123,6 +123,18 @@ func decodeContentBlock(raw json.RawMessage) (ContentBlock, error) {
 			return nil, err
 		}
 		return &b, nil
+	case "server_tool_use":
+		var b ServerToolUseBlock
+		if err := json.Unmarshal(raw, &b); err != nil {
+			return nil, err
+		}
+		return &b, nil
+	case "server_tool_result", "advisor_tool_result":
+		var b ServerToolResultBlock
+		if err := json.Unmarshal(raw, &b); err != nil {
+			return nil, err
+		}
+		return &b, nil
 	default:
 		// Forward-compatibility: surface unknown block types as text holding
 		// their raw JSON so callers are not blocked by CLI additions.

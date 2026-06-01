@@ -65,6 +65,8 @@ type Options struct {
 	excludeDynamicSections bool
 	mcpServers             map[string]McpServerConfig
 
+	sandbox *SandboxSettings
+
 	// runtime callbacks.
 	canUseTool CanUseTool
 
@@ -186,6 +188,11 @@ func WithSettingSources(sources ...string) Option {
 	return func(o *Options) { o.settingSources = append(o.settingSources, sources...) }
 }
 
+// WithSandbox configures the CLI command sandbox.
+func WithSandbox(s SandboxSettings) Option {
+	return func(o *Options) { o.sandbox = &s }
+}
+
 // WithPermissionPromptToolName sets the MCP tool the CLI uses to prompt for
 // permission decisions. This is independent of [WithCanUseTool], which receives
 // decisions over the control protocol.
@@ -213,6 +220,18 @@ func WithEnv(env map[string]string) Option {
 // WithPluginDir adds plugin directories.
 func WithPluginDir(dirs ...string) Option {
 	return func(o *Options) { o.pluginDirs = append(o.pluginDirs, dirs...) }
+}
+
+// WithPlugins registers structured local plugin configs. Each adds its path as
+// a plugin directory.
+func WithPlugins(plugins ...SdkPluginConfig) Option {
+	return func(o *Options) {
+		for _, p := range plugins {
+			if p.Path != "" {
+				o.pluginDirs = append(o.pluginDirs, p.Path)
+			}
+		}
+	}
 }
 
 // WithJSONSchema constrains the final result to the given JSON Schema.

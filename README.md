@@ -73,6 +73,17 @@ Built milestone-by-milestone against the verified official wire protocol.
       plugins) and env vars (`CLAUDE_AGENT_SDK_VERSION`, `PWD`); `RewindFiles`;
       runnable [examples](examples/) for one-shot query, interactive sessions,
       and a custom Go tool.
+- [x] **M6 — Wider parity:** on-disk session reading (`ListSessions`,
+      `GetSessionInfo`, `GetSessionMessages`, `ListSubagents`,
+      `GetSubagentMessages`), typed hook inputs (`Decode*` helpers), typed task
+      notifications, the full `AgentDefinition` field set, `SettingSource`,
+      `SdkPluginConfig`; four more examples (hooks, permission, options,
+      sessions).
+- [x] **M7 — Full name-for-name parity:** session store + mutations
+      (`SessionStore`, `InMemorySessionStore`, `*ViaStore`), sandbox settings
+      (`WithSandbox`), rate-limit and context-usage types, server-tool content
+      blocks, task started/progress messages, and the remaining hook-input and
+      MCP-status types. See [PARITY.md](PARITY.md).
 
 > Fidelity note: each milestone's wire format was checked against the official
 > `claude-agent-sdk-python` source. One correction surfaced in M5 — a
@@ -82,12 +93,13 @@ Built milestone-by-milestone against the verified official wire protocol.
 
 ## Parity
 
-The core agent-driving surface (query, interactive client, options, messages,
-tools, MCP, permissions, hooks, subagents, control requests, errors) is at
-parity with the official Python SDK, with each wire format verified against its
-source. A session-management subsystem, typed hook inputs, sandbox/rate-limit
-types, and most examples are deferred to follow-up milestones. See
-[PARITY.md](PARITY.md) for the full breakdown.
+The Go port covers the official Python SDK's public surface name-for-name —
+query and interactive client, options, messages and content blocks (including
+server-tool and task lifecycle), tools and MCP, permissions and typed hook
+inputs, subagents, control requests, on-disk session reading, the session store
+and mutations, sandbox, rate-limit and context-usage types, and errors. Every
+wire format was verified against the Python source. See [PARITY.md](PARITY.md)
+for the full name-by-name mapping.
 
 ## Design
 

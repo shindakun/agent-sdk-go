@@ -33,7 +33,12 @@ func UnmarshalMessage(b []byte) (Message, error) {
 	case "stream_event":
 		return decodeStreamEvent(b)
 	case "task_notification":
-		return &TaskNotification{Raw: clone(b)}, nil
+		var tn TaskNotification
+		if err := json.Unmarshal(b, &tn); err != nil {
+			return nil, &MessageParseError{Type: "task_notification", Raw: clone(b), Err: err}
+		}
+		tn.Raw = clone(b)
+		return &tn, nil
 	case "control_request", "control_response", "control_cancel_request",
 		"transcript_mirror", "end", "error":
 		return nil, &notAMessageError{typ: probe.Type}
@@ -115,6 +120,24 @@ func decodeSystem(b []byte) (Message, error) {
 	}
 	if err := json.Unmarshal(b, &env); err != nil {
 		return nil, &MessageParseError{Type: "system", Raw: clone(b), Err: err}
+	}
+
+	// Task lifecycle frames are modeled as their own message types.
+	switch env.Subtype {
+	case "task_started":
+		var m TaskStartedMessage
+		if err := json.Unmarshal(b, &m); err != nil {
+			return nil, &MessageParseError{Type: "system/task_started", Raw: clone(b), Err: err}
+		}
+		m.Raw = clone(b)
+		return &m, nil
+	case "task_progress":
+		var m TaskProgressMessage
+		if err := json.Unmarshal(b, &m); err != nil {
+			return nil, &MessageParseError{Type: "system/task_progress", Raw: clone(b), Err: err}
+		}
+		m.Raw = clone(b)
+		return &m, nil
 	}
 	// "init" carries session_id and tools at the top level rather than in data.
 	data := env.Data

@@ -6,16 +6,19 @@ import (
 )
 
 // ContextUsage reports the context-window breakdown returned by the CLI. Raw
-// holds the full payload for fields not modeled here.
+// holds the full payload; use [ContextUsage.Typed] for structured access.
 type ContextUsage struct {
 	Raw json.RawMessage
 }
 
-// McpServerStatus reports the state of one MCP server.
-type McpServerStatus struct {
-	Name   string `json:"name"`
-	Status string `json:"status"`
-	Raw    json.RawMessage
+// Typed decodes the raw payload into a [ContextUsageResponse].
+func (c ContextUsage) Typed() (ContextUsageResponse, error) {
+	var r ContextUsageResponse
+	if len(c.Raw) == 0 {
+		return r, nil
+	}
+	err := json.Unmarshal(c.Raw, &r)
+	return r, err
 }
 
 // Interrupt stops the current turn.
@@ -46,8 +49,18 @@ func (c *Client) GetContextUsage(ctx context.Context) (ContextUsage, error) {
 }
 
 // McpStatus returns the status of configured MCP servers.
-func (c *Client) McpStatus(ctx context.Context) (json.RawMessage, error) {
-	return c.sendControl(ctx, "mcp_status", nil)
+func (c *Client) McpStatus(ctx context.Context) (McpStatusResponse, error) {
+	payload, err := c.sendControl(ctx, "mcp_status", nil)
+	if err != nil {
+		return McpStatusResponse{}, err
+	}
+	var resp McpStatusResponse
+	if len(payload) > 0 {
+		if err := json.Unmarshal(payload, &resp); err != nil {
+			return McpStatusResponse{}, err
+		}
+	}
+	return resp, nil
 }
 
 // McpReconnect reconnects a failed MCP server.
