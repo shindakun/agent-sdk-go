@@ -1,0 +1,9 @@
+# Binaries / test artifacts
+*.test
+*.out
+/dist/
+/bin/
+
+# Editor / OS
+.DS_Store
+*.swp
