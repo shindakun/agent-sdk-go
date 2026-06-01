@@ -107,6 +107,8 @@ func (s *scriptedTransport) flushScript() {
 	s.ch <- transport.RawLine{Err: io.EOF}
 }
 
+func (s *scriptedTransport) EndInput() error { return nil }
+
 func (s *scriptedTransport) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -219,6 +221,8 @@ func (s *interactiveTransport) send(l transport.RawLine) {
 		s.ch <- l
 	}
 }
+
+func (s *interactiveTransport) EndInput() error { return nil }
 
 func (s *interactiveTransport) Close() error {
 	s.mu.Lock()

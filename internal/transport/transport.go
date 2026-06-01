@@ -23,6 +23,9 @@ type Transport interface {
 	// Write sends one JSON object (a newline is appended) to the subprocess
 	// stdin. Writes are serialized internally.
 	Write(ctx context.Context, obj []byte) error
+	// EndInput closes the subprocess stdin, signaling end-of-input so the CLI
+	// finishes the current turn and exits. Further writes fail afterward.
+	EndInput() error
 	// Read returns the channel of framed lines. It is closed when the stream
 	// ends; the final line carries Err == io.EOF.
 	Read() <-chan RawLine

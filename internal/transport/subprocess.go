@@ -255,6 +255,17 @@ func (t *subprocessTransport) Write(ctx context.Context, obj []byte) error {
 	return nil
 }
 
+func (t *subprocessTransport) EndInput() error {
+	t.writeMu.Lock()
+	defer t.writeMu.Unlock()
+	if t.stdin == nil {
+		return nil
+	}
+	err := t.stdin.Close()
+	t.stdin = nil
+	return err
+}
+
 func (t *subprocessTransport) Read() <-chan RawLine {
 	return t.readCh
 }
@@ -262,9 +273,13 @@ func (t *subprocessTransport) Read() <-chan RawLine {
 func (t *subprocessTransport) Close() error {
 	t.closeOnce.Do(func() {
 		// Closing stdin signals the CLI to finish the current turn and exit.
+		// EndInput may have already closed it; guard with the write lock.
+		t.writeMu.Lock()
 		if t.stdin != nil {
 			_ = t.stdin.Close()
+			t.stdin = nil
 		}
+		t.writeMu.Unlock()
 
 		// Wait for the read/stderr pumps to drain.
 		t.wg.Wait()

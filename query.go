@@ -35,12 +35,24 @@ func Query(ctx context.Context, prompt string, opts ...Option) iter.Seq2[Message
 			return
 		}
 
+		// One-shot: signal end-of-input so the CLI exits after the turn. If the
+		// session needs bidirectional traffic (SDK MCP servers, hooks, or a
+		// permission callback), keep stdin open until the first result; close
+		// it immediately otherwise. This mirrors the official SDK.
+		bidi := client.sess.needsBidirectional()
+		if !bidi {
+			_ = client.sess.endInput()
+		}
+
 		for msg, err := range client.Messages(ctx) {
 			if !yield(msg, err) {
 				return // consumer broke out; defer cancels + closes
 			}
 			if err != nil {
 				return
+			}
+			if _, isResult := msg.(*ResultMessage); isResult && bidi {
+				_ = client.sess.endInput()
 			}
 		}
 	}

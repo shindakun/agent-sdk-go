@@ -135,6 +135,21 @@ func (s *session) sendPrompt(ctx context.Context, prompt string) error {
 // engineRef exposes the protocol engine for control methods.
 func (s *session) engineRef() *protocol.Engine { return s.engine }
 
+// endInput closes the CLI's stdin so it finishes the turn and exits. Used by
+// one-shot Query after the prompt (and any bidirectional traffic) is done.
+func (s *session) endInput() error {
+	if s.t == nil {
+		return nil
+	}
+	return s.t.EndInput()
+}
+
+// needsBidirectional reports whether the session requires stdin to stay open
+// after the prompt for control-protocol traffic (SDK MCP servers or hooks).
+func (s *session) needsBidirectional() bool {
+	return len(s.opts.sdkMcpServers()) > 0 || len(s.registry.hooks) > 0 || s.opts.canUseTool != nil
+}
+
 // messages returns the raw message-line channel from the engine.
 func (s *session) messages() <-chan protocol.MessageLine {
 	return s.engine.Messages()
