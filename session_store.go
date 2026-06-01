@@ -57,13 +57,13 @@ type SessionSummaryEntry struct {
 }
 
 // SessionStoreFlushMode controls when a store flushes pending writes.
-type SessionStoreFlushMode int
+type SessionStoreFlushMode string
 
 const (
-	// FlushImmediate flushes on every append.
-	FlushImmediate SessionStoreFlushMode = iota
-	// FlushOnClose defers flushing until the store is closed.
-	FlushOnClose
+	// FlushBatched flushes on each result message (explicit flush points).
+	FlushBatched SessionStoreFlushMode = "batched"
+	// FlushEager flushes eagerly as entries arrive.
+	FlushEager SessionStoreFlushMode = "eager"
 )
 
 // storeKey is the internal map key.

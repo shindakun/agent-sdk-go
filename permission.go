@@ -18,6 +18,10 @@ const (
 	PermissionBypass PermissionMode = "bypassPermissions"
 	// PermissionPlan runs in read-only planning mode.
 	PermissionPlan PermissionMode = "plan"
+	// PermissionDontAsk proceeds without prompting but does not bypass rules.
+	PermissionDontAsk PermissionMode = "dontAsk"
+	// PermissionAuto lets the CLI choose the mode automatically.
+	PermissionAuto PermissionMode = "auto"
 )
 
 // CanUseTool is a callback invoked when the CLI asks the SDK to decide whether a
@@ -26,8 +30,14 @@ type CanUseTool func(ctx context.Context, toolName string, input json.RawMessage
 
 // PermissionContext carries additional information about a permission request.
 type PermissionContext struct {
-	ToolUseID   string
-	Suggestions json.RawMessage
+	ToolUseID      string
+	Suggestions    json.RawMessage
+	AgentID        string
+	BlockedPath    string
+	DecisionReason string
+	Title          string
+	DisplayName    string
+	Description    string
 }
 
 // PermissionResult is the outcome of a [CanUseTool] callback. The concrete types

@@ -81,7 +81,9 @@ type ResultMessage struct {
 	StructuredOutput  json.RawMessage  `json:"structured_output,omitempty"`
 	PermissionDenials json.RawMessage  `json:"permission_denials,omitempty"`
 	DeferredToolUse   *DeferredToolUse `json:"deferred_tool_use,omitempty"`
+	APIErrorStatus    *int             `json:"api_error_status,omitempty"`
 	SessionID         string           `json:"session_id"`
+	UUID              string           `json:"uuid,omitempty"`
 	Raw               json.RawMessage
 }
 
@@ -141,6 +143,7 @@ type TaskNotificationMessage struct {
 	Summary    string                 `json:"summary"`
 	OutputFile string                 `json:"output_file"`
 	SessionID  string                 `json:"session_id"`
+	UUID       string                 `json:"uuid,omitempty"`
 	ToolUseID  string                 `json:"tool_use_id,omitempty"`
 	Usage      *TaskUsage             `json:"usage,omitempty"`
 	Raw        json.RawMessage

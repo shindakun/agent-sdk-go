@@ -40,6 +40,12 @@ type canUseToolRequest struct {
 	Input                 json.RawMessage `json:"input"`
 	PermissionSuggestions json.RawMessage `json:"permission_suggestions"`
 	ToolUseID             string          `json:"tool_use_id"`
+	AgentID               string          `json:"agent_id"`
+	BlockedPath           string          `json:"blocked_path"`
+	DecisionReason        string          `json:"decision_reason"`
+	Title                 string          `json:"title"`
+	DisplayName           string          `json:"display_name"`
+	Description           string          `json:"description"`
 }
 
 func (s *session) handleCanUseTool(ctx context.Context, payload json.RawMessage) (json.RawMessage, error) {
@@ -52,8 +58,14 @@ func (s *session) handleCanUseTool(ctx context.Context, payload json.RawMessage)
 	}
 
 	result, err := s.opts.canUseTool(ctx, req.ToolName, req.Input, PermissionContext{
-		ToolUseID:   req.ToolUseID,
-		Suggestions: req.PermissionSuggestions,
+		ToolUseID:      req.ToolUseID,
+		Suggestions:    req.PermissionSuggestions,
+		AgentID:        req.AgentID,
+		BlockedPath:    req.BlockedPath,
+		DecisionReason: req.DecisionReason,
+		Title:          req.Title,
+		DisplayName:    req.DisplayName,
+		Description:    req.Description,
 	})
 	if err != nil {
 		return nil, err

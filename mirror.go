@@ -69,7 +69,7 @@ func (b *mirrorBatcher) enqueue(raw []byte) {
 	b.pending[sk] = append(b.pending[sk], entries...)
 	b.keys[sk] = key
 	b.count += len(entries)
-	overflow := b.flush == FlushImmediate || b.count >= mirrorMaxPendingEntries
+	overflow := b.flush == FlushEager || b.count >= mirrorMaxPendingEntries
 	b.mu.Unlock()
 
 	if overflow {

@@ -2,12 +2,19 @@
 
 This maps the Go port name-for-name against the reference
 [`anthropics/claude-agent-sdk-python`](https://github.com/anthropics/claude-agent-sdk-python).
-Parity is **mechanically verified** against a clone of the source: the public
-`__all__` (**123 names**) and every `ClaudeAgentOptions` field (**45**) are diffed
-against the Go exported surface.
+Parity is **mechanically verified** against a clone of the source at three
+levels — names, fields, and enum values — using AST extraction, not eyeballing:
 
-- Public names: **123/123** covered (5 documented N/A below).
-- Options: **45/45** covered (2 documented N/A below).
+- Public names (`__all__`): **123/123** covered (5 documented N/A below).
+- `ClaudeAgentOptions` fields: **45/45** covered (2 documented N/A below).
+- **Per-type field sets**: every public dataclass/TypedDict field diffed against
+  the Go struct (incl. nested-vs-top-level decode sources).
+- **Literal value sets**: `PermissionMode` (6), `HookEvent` (10),
+  `SessionStoreFlushMode` (batched/eager), `RateLimitType`/`Status`,
+  `TaskNotificationStatus`, `ServerToolName`, `ThinkingDisplay`, etc.
+- **Inbound control-request fields**: `can_use_tool` delivers the full
+  `ToolPermissionContext` (agent_id, blocked_path, decision_reason, title,
+  display_name, description), `hook_callback`, `mcp_message`.
 
 Addresses [claude-agent-sdk-python#498](https://github.com/anthropics/claude-agent-sdk-python/issues/498).
 

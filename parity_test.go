@@ -234,3 +234,54 @@ func TestHookEventValuesMatchPython(t *testing.T) {
 		}
 	}
 }
+
+func TestPermissionModeValues(t *testing.T) {
+	// The 6 Python PermissionMode values.
+	want := map[PermissionMode]bool{
+		PermissionDefault: true, PermissionAcceptEdits: true, PermissionPlan: true,
+		PermissionBypass: true, PermissionDontAsk: true, PermissionAuto: true,
+	}
+	wantStr := []string{"default", "acceptEdits", "plan", "bypassPermissions", "dontAsk", "auto"}
+	if len(want) != len(wantStr) {
+		t.Fatalf("count mismatch")
+	}
+	have := map[string]bool{}
+	for m := range want {
+		have[string(m)] = true
+	}
+	for _, s := range wantStr {
+		if !have[s] {
+			t.Errorf("missing permission mode %q", s)
+		}
+	}
+}
+
+func TestSessionStoreFlushModeValues(t *testing.T) {
+	if FlushBatched != "batched" || FlushEager != "eager" {
+		t.Errorf("flush modes = %q/%q, want batched/eager", FlushBatched, FlushEager)
+	}
+}
+
+func TestCanUseToolContextFullFields(t *testing.T) {
+	tr := newInteractiveTransport()
+	defer installInteractive(tr)()
+	var got PermissionContext
+	client := NewClient(WithCanUseTool(
+		func(ctx context.Context, tool string, in json.RawMessage, pc PermissionContext) (PermissionResult, error) {
+			got = pc
+			return PermissionAllow{}, nil
+		}))
+	if err := client.Connect(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	tr.sendInbound(t, "rin_1", "can_use_tool", map[string]any{
+		"tool_name": "Bash", "input": json.RawMessage(`{}`), "tool_use_id": "tu",
+		"agent_id": "ag", "blocked_path": "/etc", "decision_reason": "policy",
+		"title": "T", "display_name": "DN", "description": "D",
+	})
+	if got.AgentID != "ag" || got.BlockedPath != "/etc" || got.DecisionReason != "policy" ||
+		got.Title != "T" || got.DisplayName != "DN" || got.Description != "D" {
+		t.Errorf("permission context missing fields: %+v", got)
+	}
+}

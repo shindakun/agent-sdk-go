@@ -60,7 +60,8 @@ type NotificationHookInput struct {
 // PreCompactHookInput is the payload for [HookPreCompact].
 type PreCompactHookInput struct {
 	BaseHookInput
-	Trigger string `json:"trigger,omitempty"`
+	Trigger            string `json:"trigger,omitempty"`
+	CustomInstructions string `json:"custom_instructions,omitempty"`
 }
 
 // SubagentStartHookInput is the payload for a subagent-start hook.
@@ -73,9 +74,10 @@ type SubagentStartHookInput struct {
 // PermissionRequestHookInput is the payload for a permission-request hook.
 type PermissionRequestHookInput struct {
 	BaseHookInput
-	ToolName  string          `json:"tool_name"`
-	ToolInput json.RawMessage `json:"tool_input"`
-	ToolUseID string          `json:"tool_use_id"`
+	ToolName              string          `json:"tool_name"`
+	ToolInput             json.RawMessage `json:"tool_input"`
+	ToolUseID             string          `json:"tool_use_id,omitempty"`
+	PermissionSuggestions json.RawMessage `json:"permission_suggestions,omitempty"`
 }
 
 // SubagentStopHookInput is the payload for [HookSubagentStop].

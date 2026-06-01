@@ -170,7 +170,18 @@ type ContextUsageResponse struct {
 	Percentage           float64                `json:"percentage"`
 	Model                string                 `json:"model"`
 	IsAutoCompactEnabled bool                   `json:"isAutoCompactEnabled"`
+	MemoryFiles          json.RawMessage        `json:"memoryFiles,omitempty"`
+	McpTools             json.RawMessage        `json:"mcpTools,omitempty"`
+	Agents               json.RawMessage        `json:"agents,omitempty"`
+	GridRows             json.RawMessage        `json:"gridRows,omitempty"`
 	AutoCompactThreshold int                    `json:"autoCompactThreshold,omitempty"`
+	DeferredBuiltinTools json.RawMessage        `json:"deferredBuiltinTools,omitempty"`
+	SystemTools          json.RawMessage        `json:"systemTools,omitempty"`
+	SystemPromptSections json.RawMessage        `json:"systemPromptSections,omitempty"`
+	SlashCommands        json.RawMessage        `json:"slashCommands,omitempty"`
+	Skills               json.RawMessage        `json:"skills,omitempty"`
+	MessageBreakdown     json.RawMessage        `json:"messageBreakdown,omitempty"`
+	APIUsage             json.RawMessage        `json:"apiUsage,omitempty"`
 }
 
 // --- MCP status --------------------------------------------------------------
