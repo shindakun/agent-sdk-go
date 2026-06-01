@@ -46,15 +46,29 @@ func (o *Options) buildArgs() ([]string, error) {
 		args = append(args, "--betas", joinComma(o.betas))
 	}
 
-	if o.thinking.enabled {
-		args = append(args, "--thinking")
-		if o.thinking.maxTokens > 0 {
-			args = append(args, "--max-thinking-tokens", strconv.Itoa(o.thinking.maxTokens))
+	// Thinking config takes precedence over the deprecated scalar token budget,
+	// mirroring the reference: adaptive/disabled emit --thinking <value>, enabled
+	// emits --max-thinking-tokens <budget>, and --thinking-display applies to
+	// non-disabled configs.
+	switch t := o.thinking.(type) {
+	case ThinkingConfigAdaptive:
+		args = append(args, "--thinking", "adaptive")
+		if o.thinkingDisplay != "" || t.Display != "" {
+			args = append(args, "--thinking-display", displayOr(t.Display, o.thinkingDisplay))
 		}
-		if o.thinking.effort != "" {
-			args = append(args, "--effort", o.thinking.effort)
+	case ThinkingConfigEnabled:
+		args = append(args, "--max-thinking-tokens", strconv.Itoa(t.BudgetTokens))
+		if o.thinkingDisplay != "" || t.Display != "" {
+			args = append(args, "--thinking-display", displayOr(t.Display, o.thinkingDisplay))
+		}
+	case ThinkingConfigDisabled:
+		args = append(args, "--thinking", "disabled")
+	case nil:
+		if o.maxThinkingTokens > 0 {
+			args = append(args, "--max-thinking-tokens", strconv.Itoa(o.maxThinkingTokens))
 		}
 	}
+
 	// Standalone effort (independent of thinking config).
 	if o.effort != "" {
 		args = append(args, "--effort", o.effort)
@@ -273,6 +287,15 @@ func (o *Options) sdkMcpServers() map[string]*SdkMcpServer {
 		}
 	}
 	return out
+}
+
+// displayOr prefers the per-config display value, falling back to the
+// option-level WithThinkingDisplay.
+func displayOr(cfg, opt ThinkingDisplay) string {
+	if cfg != "" {
+		return string(cfg)
+	}
+	return string(opt)
 }
 
 func joinComma(items []string) string {

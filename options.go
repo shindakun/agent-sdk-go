@@ -24,13 +24,6 @@ type systemPromptConfig struct {
 	text string
 }
 
-// thinkingConfig holds extended-thinking configuration.
-type thinkingConfig struct {
-	enabled   bool
-	maxTokens int
-	effort    string // "low" | "medium" | "high"
-}
-
 // Options configures a [Query] or [Client]. Construct it with the With*
 // functional options rather than setting fields directly.
 type Options struct {
@@ -43,7 +36,9 @@ type Options struct {
 	maxTurns                 int
 	maxBudgetUSD             float64
 	betas                    []string
-	thinking                 thinkingConfig
+	thinking                 ThinkingConfig // typed union, or nil
+	maxThinkingTokens        int            // deprecated scalar path
+	thinkingDisplay          ThinkingDisplay
 	settings                 string
 	addDirs                  []string
 	permissionMode           PermissionMode
@@ -154,12 +149,24 @@ func WithBetas(betas ...string) Option {
 	return func(o *Options) { o.betas = append(o.betas, betas...) }
 }
 
-// WithThinking enables extended thinking. maxTokens and effort are optional
-// (pass 0 / "" to omit).
-func WithThinking(maxTokens int, effort string) Option {
-	return func(o *Options) {
-		o.thinking = thinkingConfig{enabled: true, maxTokens: maxTokens, effort: effort}
-	}
+// WithThinkingConfig sets the extended-thinking configuration. Pass one of
+// [ThinkingConfigAdaptive], [ThinkingConfigEnabled], or [ThinkingConfigDisabled].
+// It takes precedence over [WithMaxThinkingTokens].
+func WithThinkingConfig(cfg ThinkingConfig) Option {
+	return func(o *Options) { o.thinking = cfg }
+}
+
+// WithMaxThinkingTokens sets the thinking token budget via the deprecated
+// scalar path (maps to --max-thinking-tokens). Prefer [WithThinkingConfig] with
+// [ThinkingConfigEnabled].
+func WithMaxThinkingTokens(n int) Option {
+	return func(o *Options) { o.maxThinkingTokens = n }
+}
+
+// WithThinkingDisplay controls how thinking output is shown (maps to
+// --thinking-display). Applies to adaptive and enabled thinking.
+func WithThinkingDisplay(d ThinkingDisplay) Option {
+	return func(o *Options) { o.thinkingDisplay = d }
 }
 
 // WithSettings points the CLI at a settings file or JSON string.

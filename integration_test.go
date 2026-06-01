@@ -353,3 +353,29 @@ func TestIntegrationInterrupt(t *testing.T) {
 		t.Error("no result within 30s after interrupt — likely hung")
 	}
 }
+
+// TestIntegrationThinking verifies an adaptive-thinking turn completes against
+// the real CLI (the bare --thinking flag the SDK used to emit was rejected).
+func TestIntegrationThinking(t *testing.T) {
+	skipIfNoCLI(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	var result *ResultMessage
+	for msg, err := range Query(ctx, "What is 2+2? Reply with only the number.",
+		WithThinkingConfig(ThinkingConfigAdaptive{Type: "adaptive"}),
+	) {
+		if err != nil {
+			t.Fatalf("query error: %v", err)
+		}
+		if rm, ok := msg.(*ResultMessage); ok {
+			result = rm
+		}
+	}
+	if result == nil {
+		t.Fatal("no result — thinking turn did not complete")
+	}
+	if result.IsError {
+		t.Errorf("thinking turn errored: %v", result.Errors)
+	}
+}

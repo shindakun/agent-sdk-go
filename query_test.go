@@ -131,7 +131,7 @@ func TestBuildArgsParityFlags(t *testing.T) {
 		WithPermissionPromptToolName("mcp__perm__prompt"),
 		WithFallbackModel("haiku"),
 		WithMaxBudgetUSD(2.5),
-		WithThinking(8000, "high"),
+		WithEffort(EffortHigh),
 		WithAddDir("/a", "/b"),
 		WithPluginDir("/p"),
 	)
@@ -148,16 +148,12 @@ func TestBuildArgsParityFlags(t *testing.T) {
 	if !argsContainsFlag(args, "--fork-session") {
 		t.Error("missing --fork-session")
 	}
-	if !argsContainsFlag(args, "--thinking") {
-		t.Error("missing --thinking")
-	}
 	for flag, val := range map[string]string{
 		"--setting-sources":        "user,project",
 		"--resume":                 "sess_7",
 		"--permission-prompt-tool": "mcp__perm__prompt",
 		"--fallback-model":         "haiku",
 		"--max-budget-usd":         "2.5",
-		"--max-thinking-tokens":    "8000",
 		"--effort":                 "high",
 	} {
 		if !argsContainPair(args, flag, val) {
