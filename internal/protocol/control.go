@@ -43,9 +43,17 @@ type Engine struct {
 
 	msgCh chan MessageLine
 
+	// onMirror, when set, receives raw transcript_mirror frames instead of the
+	// engine dropping them.
+	onMirror func([]byte)
+
 	startOnce sync.Once
 	closed    atomic.Bool
 }
+
+// SetMirrorSink registers a callback to receive transcript_mirror frames. It
+// must be called before [Engine.Start].
+func (e *Engine) SetMirrorSink(fn func([]byte)) { e.onMirror = fn }
 
 // MessageLine is a non-control stream-json line forwarded to the consumer, or a
 // terminal error/EOF.
@@ -110,7 +118,11 @@ func (e *Engine) dispatch(line []byte) {
 	case "control_cancel_request":
 		e.handleCancel(line)
 	case "transcript_mirror":
-		// SessionStore write frames are peeled off and not forwarded.
+		// SessionStore write frames are peeled off the stream. When a sink is
+		// registered they are delivered to it; otherwise dropped.
+		if e.onMirror != nil {
+			e.onMirror(append([]byte(nil), line...))
+		}
 	default:
 		e.msgCh <- MessageLine{Data: append([]byte(nil), line...)}
 	}

@@ -2,12 +2,14 @@ package claude
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -20,6 +22,18 @@ import (
 const maxSanitizedLength = 200
 
 var sanitizeRe = regexp.MustCompile(`[^a-zA-Z0-9]`)
+
+// skipFirstPromptRe matches auto-generated or system user messages that should
+// be skipped when extracting a session's first meaningful prompt, mirroring the
+// official SDK's _SKIP_FIRST_PROMPT_PATTERN.
+var skipFirstPromptRe = regexp.MustCompile(
+	`^(?:<local-command-stdout>|<session-start-hook>|<tick>|<goal>|` +
+		`\[Request interrupted by user[^\]]*\]|` +
+		`\s*<ide_opened_file>[\s\S]*</ide_opened_file>\s*$|` +
+		`\s*<ide_selection>[\s\S]*</ide_selection>\s*$)`)
+
+// commandNameRe extracts a slash-command name from a transcript line.
+var commandNameRe = regexp.MustCompile(`<command-name>(.*?)</command-name>`)
 
 // SDKSessionInfo is metadata about a stored session.
 type SDKSessionInfo struct {
@@ -60,6 +74,17 @@ func SessionsDir(directory string) (string, error) {
 		return "", err
 	}
 	return filepath.Join(home, ".claude", "projects", sanitizePath(directory)), nil
+}
+
+// projectsDirFor returns the ~/.claude/projects directory (the parent of all
+// per-project session dirs). The directory argument is accepted for symmetry
+// with SessionsDir but does not affect the result.
+func projectsDirFor(directory string) (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".claude", "projects"), nil
 }
 
 // sanitizePath replaces non-alphanumeric runs with hyphens, appending a djb2
@@ -142,6 +167,88 @@ func GetSessionMessages(sessionID, directory string, limit, offset int) ([]Sessi
 		return nil, err
 	}
 	return readSessionMessages(filepath.Join(dir, sessionID+".jsonl"), limit, offset)
+}
+
+// ImportOption configures [ImportSessionToStore].
+type ImportOption func(*importConfig)
+
+type importConfig struct {
+	directory        string
+	includeSubagents bool
+	batchSize        int
+}
+
+// ImportDirectory sets the project directory the session lives under (same
+// semantics as [ListSessions]).
+func ImportDirectory(dir string) ImportOption {
+	return func(c *importConfig) { c.directory = dir }
+}
+
+// ImportBatchSize sets the maximum entries per store Append call.
+func ImportBatchSize(n int) ImportOption {
+	return func(c *importConfig) {
+		if n > 0 {
+			c.batchSize = n
+		}
+	}
+}
+
+// ImportIncludeSubagents toggles importing subagent transcripts.
+func ImportIncludeSubagents(v bool) ImportOption {
+	return func(c *importConfig) { c.includeSubagents = v }
+}
+
+// ImportSessionToStore replays a local session transcript into a [SessionStore],
+// streaming the on-disk JSONL and appending in batches. The destination project
+// key is the on-disk project directory name, so an imported session is
+// indistinguishable from a live-mirrored one.
+func ImportSessionToStore(ctx context.Context, sessionID string, store SessionStore, opts ...ImportOption) error {
+	cfg := importConfig{includeSubagents: true, batchSize: 500}
+	for _, o := range opts {
+		o(&cfg)
+	}
+
+	dir, err := SessionsDir(cfg.directory)
+	if err != nil {
+		return err
+	}
+	projectKey := filepath.Base(dir)
+	path := filepath.Join(dir, sessionID+".jsonl")
+
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	key := SessionKey{ProjectKey: projectKey, SessionID: sessionID}
+	batch := make([]SessionStoreEntry, 0, cfg.batchSize)
+	flush := func() error {
+		if len(batch) == 0 {
+			return nil
+		}
+		if err := store.Append(ctx, key, batch); err != nil {
+			return err
+		}
+		batch = batch[:0]
+		return nil
+	}
+
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
+	for sc.Scan() {
+		line := append([]byte(nil), sc.Bytes()...)
+		batch = append(batch, SessionStoreEntry{Data: line})
+		if len(batch) >= cfg.batchSize {
+			if err := flush(); err != nil {
+				return err
+			}
+		}
+	}
+	if err := sc.Err(); err != nil {
+		return err
+	}
+	return flush()
 }
 
 // ListSubagents returns the distinct subagent ids referenced in a session.
@@ -377,8 +484,11 @@ func pickSummary(info SDKSessionInfo) string {
 	}
 }
 
-// firstUserText extracts the leading text of a user message whose content may be
-// a string or an array of text blocks.
+// firstUserText extracts a session's first meaningful prompt from a user
+// message, replicating the official SDK: it collapses newlines, skips
+// auto-generated/system lines (see [skipFirstPromptRe]), truncates to 200 runes
+// with an ellipsis, and falls back to a slash-command name when the only text
+// is a <command-name> marker.
 func firstUserText(raw json.RawMessage) string {
 	if len(raw) == 0 {
 		return ""
@@ -389,20 +499,54 @@ func firstUserText(raw json.RawMessage) string {
 	if json.Unmarshal(raw, &env) != nil {
 		return ""
 	}
+
+	var texts []string
 	var s string
 	if json.Unmarshal(env.Content, &s) == nil {
-		return s
-	}
-	var blocks []struct {
-		Type string `json:"type"`
-		Text string `json:"text"`
-	}
-	if json.Unmarshal(env.Content, &blocks) == nil {
-		for _, b := range blocks {
-			if b.Type == "text" {
-				return b.Text
+		texts = []string{s}
+	} else {
+		var blocks []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		}
+		if json.Unmarshal(env.Content, &blocks) == nil {
+			for _, b := range blocks {
+				// A tool_result-carrying user message is not a first prompt.
+				if b.Type == "tool_result" {
+					return ""
+				}
+				if b.Type == "text" {
+					texts = append(texts, b.Text)
+				}
 			}
 		}
 	}
-	return ""
+
+	var commandFallback string
+	for _, t := range texts {
+		result := strings.TrimSpace(strings.ReplaceAll(t, "\n", " "))
+		if result == "" {
+			continue
+		}
+		if m := commandNameRe.FindStringSubmatch(result); m != nil {
+			if commandFallback == "" {
+				commandFallback = m[1]
+			}
+			continue
+		}
+		if skipFirstPromptRe.MatchString(result) {
+			continue
+		}
+		return truncateRunes(result, 200)
+	}
+	return commandFallback
+}
+
+// truncateRunes truncates s to at most n runes, appending an ellipsis when cut.
+func truncateRunes(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return strings.TrimRight(string(r[:n]), " ") + "…"
 }

@@ -78,6 +78,55 @@ type PermissionRequestHookInput struct {
 	ToolUseID string          `json:"tool_use_id"`
 }
 
+// SubagentStopHookInput is the payload for [HookSubagentStop].
+type SubagentStopHookInput struct {
+	BaseHookInput
+	StopHookActive      bool   `json:"stop_hook_active"`
+	AgentID             string `json:"agent_id,omitempty"`
+	AgentTranscriptPath string `json:"agent_transcript_path,omitempty"`
+	AgentType           string `json:"agent_type,omitempty"`
+}
+
+// PostToolUseFailureHookInput is the payload for a post-tool-use-failure hook.
+type PostToolUseFailureHookInput struct {
+	BaseHookInput
+	ToolName    string          `json:"tool_name"`
+	ToolInput   json.RawMessage `json:"tool_input"`
+	ToolUseID   string          `json:"tool_use_id"`
+	Error       string          `json:"error"`
+	IsInterrupt bool            `json:"is_interrupt,omitempty"`
+}
+
+// Hook-specific outputs are typed payloads for HookOutput.HookSpecificOutput.
+
+// NotificationHookSpecificOutput is the typed hook-specific output for
+// Notification events.
+type NotificationHookSpecificOutput struct {
+	HookEventName     string `json:"hookEventName"` // "Notification"
+	AdditionalContext string `json:"additionalContext,omitempty"`
+}
+
+// SubagentStartHookSpecificOutput is the typed hook-specific output for
+// subagent-start events.
+type SubagentStartHookSpecificOutput struct {
+	HookEventName     string `json:"hookEventName"` // "SubagentStart"
+	AdditionalContext string `json:"additionalContext,omitempty"`
+}
+
+// PostToolUseFailureHookSpecificOutput is the typed hook-specific output for
+// post-tool-use-failure events.
+type PostToolUseFailureHookSpecificOutput struct {
+	HookEventName     string `json:"hookEventName"` // "PostToolUseFailure"
+	AdditionalContext string `json:"additionalContext,omitempty"`
+}
+
+// PermissionRequestHookSpecificOutput is the typed hook-specific output for
+// permission-request events.
+type PermissionRequestHookSpecificOutput struct {
+	HookEventName string          `json:"hookEventName"` // "PermissionRequest"
+	Decision      json.RawMessage `json:"decision"`
+}
+
 // DecodePreToolUse decodes a [HookPreToolUse] payload.
 func DecodePreToolUse(raw json.RawMessage) (PreToolUseHookInput, error) {
 	var in PreToolUseHookInput
@@ -109,6 +158,20 @@ func DecodeStop(raw json.RawMessage) (StopHookInput, error) {
 // DecodeNotification decodes a [HookNotification] payload.
 func DecodeNotification(raw json.RawMessage) (NotificationHookInput, error) {
 	var in NotificationHookInput
+	err := json.Unmarshal(raw, &in)
+	return in, err
+}
+
+// DecodeSubagentStop decodes a [HookSubagentStop] payload.
+func DecodeSubagentStop(raw json.RawMessage) (SubagentStopHookInput, error) {
+	var in SubagentStopHookInput
+	err := json.Unmarshal(raw, &in)
+	return in, err
+}
+
+// DecodePostToolUseFailure decodes a post-tool-use-failure payload.
+func DecodePostToolUseFailure(raw json.RawMessage) (PostToolUseFailureHookInput, error) {
+	var in PostToolUseFailureHookInput
 	err := json.Unmarshal(raw, &in)
 	return in, err
 }

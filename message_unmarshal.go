@@ -33,12 +33,14 @@ func UnmarshalMessage(b []byte) (Message, error) {
 	case "stream_event":
 		return decodeStreamEvent(b)
 	case "task_notification":
-		var tn TaskNotification
+		var tn TaskNotificationMessage
 		if err := json.Unmarshal(b, &tn); err != nil {
 			return nil, &MessageParseError{Type: "task_notification", Raw: clone(b), Err: err}
 		}
 		tn.Raw = clone(b)
 		return &tn, nil
+	case "rate_limit_event":
+		return decodeRateLimitEvent(b)
 	case "control_request", "control_response", "control_cancel_request",
 		"transcript_mirror", "end", "error":
 		return nil, &notAMessageError{typ: probe.Type}
@@ -138,6 +140,13 @@ func decodeSystem(b []byte) (Message, error) {
 		}
 		m.Raw = clone(b)
 		return &m, nil
+	case "mirror_error":
+		var m MirrorErrorMessage
+		if err := json.Unmarshal(b, &m); err != nil {
+			return nil, &MessageParseError{Type: "system/mirror_error", Raw: clone(b), Err: err}
+		}
+		m.Raw = clone(b)
+		return &m, nil
 	}
 	// "init" carries session_id and tools at the top level rather than in data.
 	data := env.Data
@@ -169,6 +178,44 @@ func decodeStreamEvent(b []byte) (Message, error) {
 	}
 	m.Raw = clone(b)
 	return &m, nil
+}
+
+// decodeRateLimitEvent decodes a rate_limit_event frame. The nested
+// rate_limit_info uses camelCase wire keys (resetsAt, rateLimitType, ...) even
+// though the public RateLimitInfo type documents snake_case names, so the wire
+// shape is decoded explicitly here.
+func decodeRateLimitEvent(b []byte) (Message, error) {
+	var wire struct {
+		UUID          string `json:"uuid"`
+		SessionID     string `json:"session_id"`
+		RateLimitInfo struct {
+			Status                RateLimitStatus  `json:"status"`
+			ResetsAt              *int64           `json:"resetsAt"`
+			RateLimitType         *RateLimitType   `json:"rateLimitType"`
+			Utilization           *float64         `json:"utilization"`
+			OverageStatus         *RateLimitStatus `json:"overageStatus"`
+			OverageResetsAt       *int64           `json:"overageResetsAt"`
+			OverageDisabledReason *string          `json:"overageDisabledReason"`
+		} `json:"rate_limit_info"`
+	}
+	if err := json.Unmarshal(b, &wire); err != nil {
+		return nil, &MessageParseError{Type: "rate_limit_event", Raw: clone(b), Err: err}
+	}
+	info := wire.RateLimitInfo
+	return &RateLimitEvent{
+		UUID:      wire.UUID,
+		SessionID: wire.SessionID,
+		RateLimitInfo: RateLimitInfo{
+			Status:                info.Status,
+			ResetsAt:              info.ResetsAt,
+			RateLimitType:         info.RateLimitType,
+			Utilization:           info.Utilization,
+			OverageStatus:         info.OverageStatus,
+			OverageResetsAt:       info.OverageResetsAt,
+			OverageDisabledReason: info.OverageDisabledReason,
+			Raw:                   clone(b),
+		},
+	}, nil
 }
 
 func clone(b []byte) json.RawMessage {

@@ -3,6 +3,7 @@ package claude
 import (
 	"encoding/json"
 	"io"
+	"time"
 )
 
 // SystemPromptMode selects how the system prompt is configured.
@@ -66,6 +67,23 @@ type Options struct {
 	mcpServers             map[string]McpServerConfig
 
 	sandbox *SandboxSettings
+
+	tools                   []string
+	toolsPreset             bool // emit --tools default
+	toolsSet                bool
+	sessionID               string
+	strictMcpConfig         bool
+	includeHookEvents       bool
+	effort                  string
+	taskBudget              *TaskBudget
+	maxBufferSize           int
+	loadTimeout             time.Duration
+	enableFileCheckpointing bool
+	userUID                 *int
+	userGID                 int
+
+	sessionStore      SessionStore
+	sessionStoreFlush SessionStoreFlushMode
 
 	// runtime callbacks.
 	canUseTool CanUseTool
@@ -198,6 +216,88 @@ func WithSandbox(s SandboxSettings) Option {
 // decisions over the control protocol.
 func WithPermissionPromptToolName(name string) Option {
 	return func(o *Options) { o.permissionPromptToolName = name }
+}
+
+// WithToolList sets the explicit tool list (maps to --tools). An empty slice
+// disables all tools. (Named WithToolList to avoid colliding with the
+// SdkMcpServer option WithTools.)
+func WithToolList(tools ...string) Option {
+	return func(o *Options) {
+		o.tools = tools
+		o.toolsSet = true
+		o.toolsPreset = false
+	}
+}
+
+// WithToolsPreset selects the default tool preset (maps to --tools default).
+func WithToolsPreset() Option {
+	return func(o *Options) {
+		o.toolsPreset = true
+		o.toolsSet = true
+	}
+}
+
+// WithSessionID sets an explicit session id (maps to --session-id).
+func WithSessionID(id string) Option {
+	return func(o *Options) { o.sessionID = id }
+}
+
+// WithStrictMcpConfig restricts MCP servers to those in the provided config
+// (maps to --strict-mcp-config).
+func WithStrictMcpConfig() Option {
+	return func(o *Options) { o.strictMcpConfig = true }
+}
+
+// WithIncludeHookEvents surfaces hook lifecycle events on the stream (maps to
+// --include-hook-events).
+func WithIncludeHookEvents() Option {
+	return func(o *Options) { o.includeHookEvents = true }
+}
+
+// WithEffort sets the reasoning effort independently of thinking config (maps
+// to --effort).
+func WithEffort(level EffortLevel) Option {
+	return func(o *Options) { o.effort = string(level) }
+}
+
+// WithTaskBudget caps the task token budget (maps to --task-budget).
+func WithTaskBudget(b TaskBudget) Option {
+	return func(o *Options) { o.taskBudget = &b }
+}
+
+// WithMaxBufferSize caps the size of a single stream-json line the transport
+// will buffer before erroring. Zero uses the default.
+func WithMaxBufferSize(bytes int) Option {
+	return func(o *Options) { o.maxBufferSize = bytes }
+}
+
+// WithLoadTimeout overrides the initialize-handshake timeout.
+func WithLoadTimeout(d time.Duration) Option {
+	return func(o *Options) { o.loadTimeout = d }
+}
+
+// WithEnableFileCheckpointing enables SDK file checkpointing (sets
+// CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING=true for the subprocess).
+func WithEnableFileCheckpointing() Option {
+	return func(o *Options) { o.enableFileCheckpointing = true }
+}
+
+// WithUser runs the CLI subprocess as the given OS user/group id (Unix only).
+func WithUser(uid, gid int) Option {
+	return func(o *Options) {
+		u := uid
+		o.userUID = &u
+		o.userGID = gid
+	}
+}
+
+// WithSessionStore mirrors the live transcript into store using the given flush
+// mode. Append failures surface as a [MirrorErrorMessage] on the stream.
+func WithSessionStore(store SessionStore, flush SessionStoreFlushMode) Option {
+	return func(o *Options) {
+		o.sessionStore = store
+		o.sessionStoreFlush = flush
+	}
 }
 
 // WithCwd sets the working directory for the CLI subprocess.

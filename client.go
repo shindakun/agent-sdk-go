@@ -64,25 +64,45 @@ func (c *Client) Connect(ctx context.Context) error {
 }
 
 // readLoop drains the engine's message lines, captures the session id from the
-// init message, decodes each line, and forwards it to consumers.
+// init message, decodes each line, and forwards it to consumers. When a live
+// SessionStore mirror is configured it also forwards synthesized
+// MirrorErrorMessages and flushes the mirror on each result message.
 func (c *Client) readLoop() {
 	defer close(c.out)
 	defer close(c.done)
 
-	for line := range c.sess.messages() {
-		msg, err := decodeMessageLine(line)
-		if err == io.EOF {
-			return
+	lines := c.sess.messages()
+	inject := c.sess.injectCh // nil unless mirroring is active
+
+	for {
+		select {
+		case m, ok := <-inject:
+			if ok {
+				c.out <- Result{Message: m}
+			} else {
+				inject = nil
+			}
+		case line, ok := <-lines:
+			if !ok {
+				return
+			}
+			msg, err := decodeMessageLine(line)
+			if err == io.EOF {
+				return
+			}
+			if err != nil {
+				c.out <- Result{Err: err}
+				continue
+			}
+			if msg == nil {
+				continue
+			}
+			c.captureSessionID(msg)
+			if _, isResult := msg.(*ResultMessage); isResult && c.sess.mirror != nil {
+				c.sess.mirror.Flush(context.Background())
+			}
+			c.out <- Result{Message: msg}
 		}
-		if err != nil {
-			c.out <- Result{Err: err}
-			continue
-		}
-		if msg == nil {
-			continue
-		}
-		c.captureSessionID(msg)
-		c.out <- Result{Message: msg}
 	}
 }
 

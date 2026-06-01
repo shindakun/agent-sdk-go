@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -62,6 +63,11 @@ func (t *subprocessTransport) Connect(ctx context.Context) error {
 	cmd := exec.CommandContext(ctx, cliPath, args...)
 	cmd.Dir = t.cfg.Cwd
 	cmd.Env = t.buildEnv()
+	if t.cfg.UID != nil {
+		if err := applyCredential(cmd, *t.cfg.UID, t.cfg.GID); err != nil {
+			return err
+		}
+	}
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -102,6 +108,9 @@ func (t *subprocessTransport) buildEnv() []string {
 	if t.cfg.Cwd != "" {
 		merged["PWD"] = t.cfg.Cwd
 	}
+	if t.cfg.EnableFileCheckpointing {
+		merged["CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING"] = "true"
+	}
 	for k, v := range t.cfg.Env {
 		merged[k] = v
 	}
@@ -141,12 +150,22 @@ func (t *subprocessTransport) readPump() {
 	defer t.wg.Done()
 	defer close(t.readCh)
 
+	maxBuf := t.cfg.MaxBufferSize
+	if maxBuf <= 0 {
+		maxBuf = DefaultMaxBufferSize
+	}
+
 	r := bufio.NewReader(t.stdout)
 	var buf []byte
 	for {
 		chunk, err := r.ReadBytes('\n')
 		if len(chunk) > 0 {
 			buf = append(buf, chunk...)
+			if len(buf) > maxBuf {
+				t.readCh <- RawLine{Err: fmt.Errorf("stream-json line exceeded max buffer size of %d bytes", maxBuf)}
+				t.readCh <- RawLine{Err: io.EOF}
+				return
+			}
 			if chunk[len(chunk)-1] == '\n' {
 				line := trimNewline(buf)
 				buf = nil

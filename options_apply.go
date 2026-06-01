@@ -54,6 +54,30 @@ func (o *Options) buildArgs() ([]string, error) {
 			args = append(args, "--effort", o.thinking.effort)
 		}
 	}
+	// Standalone effort (independent of thinking config).
+	if o.effort != "" {
+		args = append(args, "--effort", o.effort)
+	}
+
+	if o.toolsSet {
+		if o.toolsPreset {
+			args = append(args, "--tools", "default")
+		} else {
+			args = append(args, "--tools", joinComma(o.tools))
+		}
+	}
+	if o.sessionID != "" {
+		args = append(args, "--session-id", o.sessionID)
+	}
+	if o.strictMcpConfig {
+		args = append(args, "--strict-mcp-config")
+	}
+	if o.includeHookEvents {
+		args = append(args, "--include-hook-events")
+	}
+	if o.taskBudget != nil {
+		args = append(args, "--task-budget", strconv.Itoa(o.taskBudget.Total))
+	}
 
 	settings, err := o.buildSettings()
 	if err != nil {

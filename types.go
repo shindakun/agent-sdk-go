@@ -27,6 +27,53 @@ type TaskBudget struct {
 	Total int `json:"total"`
 }
 
+// ThinkingDisplay controls how thinking output is shown.
+type ThinkingDisplay string
+
+const (
+	ThinkingDisplaySummarized ThinkingDisplay = "summarized"
+	ThinkingDisplayOmitted    ThinkingDisplay = "omitted"
+)
+
+// ThinkingConfig is the union of thinking configuration shapes:
+// [ThinkingConfigAdaptive], [ThinkingConfigEnabled], [ThinkingConfigDisabled].
+type ThinkingConfig interface {
+	isThinkingConfig()
+}
+
+// ThinkingConfigAdaptive enables adaptive thinking.
+type ThinkingConfigAdaptive struct {
+	Type    string          `json:"type"` // "adaptive"
+	Display ThinkingDisplay `json:"display,omitempty"`
+}
+
+func (ThinkingConfigAdaptive) isThinkingConfig() {}
+
+// ThinkingConfigEnabled enables thinking with a fixed token budget.
+type ThinkingConfigEnabled struct {
+	Type         string          `json:"type"` // "enabled"
+	BudgetTokens int             `json:"budget_tokens"`
+	Display      ThinkingDisplay `json:"display,omitempty"`
+}
+
+func (ThinkingConfigEnabled) isThinkingConfig() {}
+
+// ThinkingConfigDisabled disables thinking.
+type ThinkingConfigDisabled struct {
+	Type string `json:"type"` // "disabled"
+}
+
+func (ThinkingConfigDisabled) isThinkingConfig() {}
+
+// TaskNotificationStatus is the terminal state of a task.
+type TaskNotificationStatus string
+
+const (
+	TaskCompleted TaskNotificationStatus = "completed"
+	TaskFailed    TaskNotificationStatus = "failed"
+	TaskStopped   TaskNotificationStatus = "stopped"
+)
+
 // --- Sandbox configuration ---------------------------------------------------
 
 // SandboxSettings configures the CLI's command sandbox.
@@ -93,12 +140,15 @@ type RateLimitInfo struct {
 	Raw                   json.RawMessage  `json:"-"`
 }
 
-// RateLimitEvent wraps a rate-limit update.
+// RateLimitEvent wraps a rate-limit update. It is also a [Message] emitted on
+// the stream as a rate_limit_event frame.
 type RateLimitEvent struct {
 	RateLimitInfo RateLimitInfo `json:"rate_limit_info"`
 	UUID          string        `json:"uuid"`
 	SessionID     string        `json:"session_id"`
 }
+
+func (*RateLimitEvent) isMessage() {}
 
 // --- Context usage -----------------------------------------------------------
 

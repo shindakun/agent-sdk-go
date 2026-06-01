@@ -42,7 +42,7 @@ func TestTaskNotificationDecode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	tn, ok := msg.(*TaskNotification)
+	tn, ok := msg.(*TaskNotificationMessage)
 	if !ok {
 		t.Fatalf("got %T", msg)
 	}

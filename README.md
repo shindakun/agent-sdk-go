@@ -84,6 +84,11 @@ Built milestone-by-milestone against the verified official wire protocol.
       (`WithSandbox`), rate-limit and context-usage types, server-tool content
       blocks, task started/progress messages, and the remaining hook-input and
       MCP-status types. See [PARITY.md](PARITY.md).
+- [x] **M8 — Mechanically verified parity:** cloned the source and diffed it —
+      closed every remaining gap (thinking-config union, `MirrorErrorMessage`,
+      `rate_limit_event` camelCase decode, session first-prompt filtering,
+      `FoldSessionSummary`, `ImportSessionToStore`, 11 missing options, live
+      `WithSessionStore` mirror). 123/123 names and 45/45 options covered.
 
 > Fidelity note: each milestone's wire format was checked against the official
 > `claude-agent-sdk-python` source. One correction surfaced in M5 — a
@@ -93,13 +98,13 @@ Built milestone-by-milestone against the verified official wire protocol.
 
 ## Parity
 
-The Go port covers the official Python SDK's public surface name-for-name —
-query and interactive client, options, messages and content blocks (including
-server-tool and task lifecycle), tools and MCP, permissions and typed hook
-inputs, subagents, control requests, on-disk session reading, the session store
-and mutations, sandbox, rate-limit and context-usage types, and errors. Every
-wire format was verified against the Python source. See [PARITY.md](PARITY.md)
-for the full name-by-name mapping.
+Parity with the official Python SDK is **mechanically verified** against a clone
+of the source: all **123** public `__all__` names and all **45**
+`ClaudeAgentOptions` fields are covered (a handful of Python-runtime-specific
+names are documented N/A). Every wire format was verified against the source —
+including subtle details like the camelCase `rate_limit_event` frame and the
+session first-prompt filtering of synthetic lines. See [PARITY.md](PARITY.md) for
+the full name-by-name mapping.
 
 ## Design
 

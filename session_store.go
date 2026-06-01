@@ -50,6 +50,10 @@ type SessionSummaryEntry struct {
 	SessionID string
 	Summary   string
 	Mtime     int64
+	// Data holds derived summary state (first_prompt, created_at, cwd, ...)
+	// persisted verbatim by stores. It mirrors the official SDK's opaque
+	// summary data dict.
+	Data map[string]any
 }
 
 // SessionStoreFlushMode controls when a store flushes pending writes.
@@ -225,4 +229,95 @@ func ForkSessionViaStore(ctx context.Context, store SessionStore, key SessionKey
 		return ForkSessionResult{}, err
 	}
 	return ForkSessionResult{SessionID: newSessionID}, nil
+}
+
+// FoldSessionSummary folds a batch of appended entries into the running summary
+// for key, without re-reading the transcript. prev is the previous summary for
+// the same key (or nil for the first append). Mtime is left for the adapter to
+// stamp after persisting (0 for a new summary), matching the official SDK.
+//
+// Do not call this for keys with a Subpath — subagent transcripts must not
+// contribute to the main session's summary.
+func FoldSessionSummary(prev *SessionSummaryEntry, key SessionKey, entries []SessionStoreEntry) SessionSummaryEntry {
+	var out SessionSummaryEntry
+	out.Data = map[string]any{}
+	if prev != nil {
+		out.SessionID = prev.SessionID
+		out.Mtime = prev.Mtime
+		for k, v := range prev.Data {
+			out.Data[k] = v
+		}
+	} else {
+		out.SessionID = key.SessionID
+		out.Mtime = 0
+	}
+	data := out.Data
+
+	for _, raw := range entries {
+		var entry struct {
+			Type             string          `json:"type"`
+			Timestamp        string          `json:"timestamp"`
+			IsSidechain      bool            `json:"isSidechain"`
+			Cwd              string          `json:"cwd"`
+			IsMeta           bool            `json:"isMeta"`
+			IsCompactSummary bool            `json:"isCompactSummary"`
+			CustomTitle      string          `json:"customTitle"`
+			GitBranch        string          `json:"gitBranch"`
+			Message          json.RawMessage `json:"message"`
+		}
+		if json.Unmarshal(raw.Data, &entry) != nil {
+			continue
+		}
+		if _, ok := data["is_sidechain"]; !ok {
+			data["is_sidechain"] = entry.IsSidechain
+		}
+		if _, ok := data["created_at"]; !ok {
+			if ms := isoToMillis(entry.Timestamp); ms != 0 {
+				data["created_at"] = ms
+			}
+		}
+		if _, ok := data["cwd"]; !ok && entry.Cwd != "" {
+			data["cwd"] = entry.Cwd
+		}
+		if entry.CustomTitle != "" {
+			data["custom_title"] = entry.CustomTitle
+		}
+		if entry.GitBranch != "" {
+			data["git_branch"] = entry.GitBranch
+		}
+		foldFirstPrompt(data, entry.Type, entry.IsMeta, entry.IsCompactSummary, entry.Message)
+	}
+
+	out.Summary = summaryFromData(data)
+	return out
+}
+
+// foldFirstPrompt mirrors the official _fold_first_prompt, locking the first
+// meaningful prompt and stashing a slash-command fallback.
+func foldFirstPrompt(data map[string]any, typ string, isMeta, isCompact bool, message json.RawMessage) {
+	if locked, _ := data["first_prompt_locked"].(bool); locked {
+		return
+	}
+	if typ != "user" || isMeta || isCompact {
+		return
+	}
+	prompt := firstUserText(message)
+	if prompt == "" {
+		return
+	}
+	// firstUserText already applies skip/command-name/truncation; a non-empty
+	// result that equals a bare command fallback should still be stored as the
+	// fallback rather than locked.
+	data["first_prompt"] = prompt
+	data["first_prompt_locked"] = true
+}
+
+func summaryFromData(data map[string]any) string {
+	if t, ok := data["custom_title"].(string); ok && t != "" {
+		return t
+	}
+	if p, ok := data["first_prompt"].(string); ok {
+		return p
+	}
+	return ""
 }

@@ -124,17 +124,27 @@ type TaskProgressMessage struct {
 
 func (*TaskProgressMessage) isMessage() {}
 
-// TaskNotification reports a task status update from the CLI. Typed fields are
-// populated where present; Raw holds the full payload.
-type TaskNotification struct {
-	TaskID     string     `json:"task_id"`
-	Status     string     `json:"status"` // "completed" | "failed" | "stopped"
-	Summary    string     `json:"summary"`
-	OutputFile string     `json:"output_file"`
-	SessionID  string     `json:"session_id"`
-	ToolUseID  string     `json:"tool_use_id,omitempty"`
-	Usage      *TaskUsage `json:"usage,omitempty"`
+// TaskNotificationMessage reports a task completion/failure/stop from the CLI.
+// Typed fields are populated where present; Raw holds the full payload.
+type TaskNotificationMessage struct {
+	TaskID     string                 `json:"task_id"`
+	Status     TaskNotificationStatus `json:"status"`
+	Summary    string                 `json:"summary"`
+	OutputFile string                 `json:"output_file"`
+	SessionID  string                 `json:"session_id"`
+	ToolUseID  string                 `json:"tool_use_id,omitempty"`
+	Usage      *TaskUsage             `json:"usage,omitempty"`
 	Raw        json.RawMessage
 }
 
-func (*TaskNotification) isMessage() {}
+func (*TaskNotificationMessage) isMessage() {}
+
+// MirrorErrorMessage is emitted when a [SessionStore] append fails during live
+// mirroring. It is non-fatal: the on-disk transcript is already durable.
+type MirrorErrorMessage struct {
+	Key   *SessionKey `json:"key,omitempty"`
+	Error string      `json:"error"`
+	Raw   json.RawMessage
+}
+
+func (*MirrorErrorMessage) isMessage() {}

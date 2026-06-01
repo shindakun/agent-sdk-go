@@ -45,7 +45,17 @@ type Config struct {
 	Stderr io.Writer
 	// SDKVersion is reported to the CLI via CLAUDE_AGENT_SDK_VERSION.
 	SDKVersion string
+	// MaxBufferSize caps a single stream-json line (bytes); 0 uses the default.
+	MaxBufferSize int
+	// EnableFileCheckpointing sets CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING.
+	EnableFileCheckpointing bool
+	// UID/GID, when UID is non-nil, run the subprocess as that OS user (Unix).
+	UID *int
+	GID int
 }
+
+// DefaultMaxBufferSize bounds a single stream-json line by default (10 MiB).
+const DefaultMaxBufferSize = 10 << 20
 
 // CLINotFoundError reports that the CLI binary could not be located.
 type CLINotFoundError struct {

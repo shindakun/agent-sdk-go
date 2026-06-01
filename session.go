@@ -27,6 +27,8 @@ type session struct {
 	// official SDKs.
 	sessionID string
 	registry  *callbackRegistry
+	mirror    *mirrorBatcher
+	injectCh  chan Message
 }
 
 func newSession(opts *Options) *session {
@@ -43,12 +45,16 @@ func (s *session) connect(ctx context.Context) error {
 	}
 
 	s.t = transportFactory(transport.Config{
-		CLIPath:    s.opts.cliPath,
-		Args:       args,
-		Cwd:        s.opts.cwd,
-		Env:        s.opts.env,
-		Stderr:     s.opts.stderr,
-		SDKVersion: Version,
+		CLIPath:                 s.opts.cliPath,
+		Args:                    args,
+		Cwd:                     s.opts.cwd,
+		Env:                     s.opts.env,
+		Stderr:                  s.opts.stderr,
+		SDKVersion:              Version,
+		MaxBufferSize:           s.opts.maxBufferSize,
+		EnableFileCheckpointing: s.opts.enableFileCheckpointing,
+		UID:                     s.opts.userUID,
+		GID:                     s.opts.userGID,
 	})
 
 	if err := s.t.Connect(ctx); err != nil {
@@ -63,9 +69,23 @@ func (s *session) connect(ctx context.Context) error {
 	}
 
 	s.engine = protocol.NewEngine(s.t, s.inboundHandler())
+
+	// Live SessionStore mirroring: peel transcript_mirror frames and append
+	// them to the configured store; failures surface as MirrorErrorMessage.
+	if s.opts.sessionStore != nil {
+		s.injectCh = make(chan Message, 16)
+		s.mirror = newMirrorBatcher(
+			s.opts.sessionStore,
+			s.opts.sessionStoreFlush,
+			func() (string, error) { return projectsDirFor(s.opts.cwd) },
+			func(m Message) { s.injectCh <- m },
+		)
+		s.engine.SetMirrorSink(s.mirror.enqueue)
+	}
+
 	s.engine.Start()
 
-	if _, err := s.engine.Initialize(ctx, init, 0); err != nil {
+	if _, err := s.engine.Initialize(ctx, init, s.opts.loadTimeout); err != nil {
 		_ = s.t.Close()
 		return &ConnectionError{Err: err}
 	}
@@ -117,6 +137,9 @@ func (s *session) messages() <-chan protocol.MessageLine {
 
 // close shuts the engine and transport down.
 func (s *session) close() error {
+	if s.mirror != nil {
+		s.mirror.Flush(context.Background())
+	}
 	if s.engine != nil {
 		s.engine.Close()
 	}
