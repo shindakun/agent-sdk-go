@@ -53,8 +53,10 @@ Built milestone-by-milestone against the verified official wire protocol.
       via stream-json; transport (spawn, discovery, framing, shutdown); control
       engine with the initialize handshake; typed message/content union; typed
       errors.
-- [ ] **M2 — Control protocol + interactive `Client`:** multi-turn sessions,
-      `Interrupt` / `SetModel` / `SetPermissionMode` / `GetContextUsage`.
+- [x] **M2 — Control protocol + interactive `Client`:** multi-turn sessions,
+      `Interrupt` / `SetModel` / `SetPermissionMode` / `GetContextUsage` /
+      `Mcp*` / `StopTask`; session-id capture and reuse; `Query` now runs on top
+      of `Client`.
 - [ ] **M3 — Permissions + hooks:** `CanUseTool` and lifecycle hooks.
 - [ ] **M4 — In-process SDK MCP tools:** define Go tools the agent can call.
 - [ ] **M5 — Full parity + examples.**

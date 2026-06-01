@@ -130,3 +130,116 @@ func installScriptedTransport(st *scriptedTransport) func() {
 	transportFactory = func(transport.Config) transport.Transport { return st }
 	return func() { transportFactory = prev }
 }
+
+// interactiveTransport is a scriptedTransport variant for multi-turn Client
+// tests. It answers every control_request, emits a scripted reply per user
+// message, and stays open (no EOF) until Close.
+type interactiveTransport struct {
+	ch     chan transport.RawLine
+	mu     sync.Mutex
+	writes [][]byte
+	closed bool
+
+	// onUser returns the message lines to emit in response to a user prompt.
+	onUser func(turn int, prompt string) [][]byte
+	// controlResponder produces a response payload per control subtype.
+	controlResponder func(subtype string, payload json.RawMessage) json.RawMessage
+	turn             int
+}
+
+func newInteractiveTransport() *interactiveTransport {
+	return &interactiveTransport{ch: make(chan transport.RawLine, 64)}
+}
+
+func (s *interactiveTransport) Connect(ctx context.Context) error { return nil }
+func (s *interactiveTransport) Read() <-chan transport.RawLine    { return s.ch }
+
+func (s *interactiveTransport) Write(ctx context.Context, obj []byte) error {
+	s.mu.Lock()
+	s.writes = append(s.writes, append([]byte(nil), obj...))
+	closed := s.closed
+	s.mu.Unlock()
+	if closed {
+		return io.ErrClosedPipe
+	}
+
+	var probe struct {
+		Type      string          `json:"type"`
+		RequestID string          `json:"request_id"`
+		Request   json.RawMessage `json:"request"`
+		Message   struct {
+			Content string `json:"content"`
+		} `json:"message"`
+	}
+	if err := json.Unmarshal(obj, &probe); err != nil {
+		return nil
+	}
+
+	switch probe.Type {
+	case "control_request":
+		var sub struct {
+			Subtype string `json:"subtype"`
+		}
+		_ = json.Unmarshal(probe.Request, &sub)
+		var payload json.RawMessage = json.RawMessage(`{}`)
+		if s.controlResponder != nil {
+			if p := s.controlResponder(sub.Subtype, probe.Request); p != nil {
+				payload = p
+			}
+		}
+		resp := map[string]any{
+			"type": "control_response",
+			"response": map[string]any{
+				"subtype":    "success",
+				"request_id": probe.RequestID,
+				"response":   payload,
+			},
+		}
+		b, _ := json.Marshal(resp)
+		s.send(transport.RawLine{Data: b})
+	case "user":
+		s.mu.Lock()
+		s.turn++
+		turn := s.turn
+		s.mu.Unlock()
+		if s.onUser != nil {
+			for _, line := range s.onUser(turn, probe.Message.Content) {
+				s.send(transport.RawLine{Data: append([]byte(nil), line...)})
+			}
+		}
+	}
+	return nil
+}
+
+func (s *interactiveTransport) send(l transport.RawLine) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.closed {
+		s.ch <- l
+	}
+}
+
+func (s *interactiveTransport) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.closed {
+		s.closed = true
+		s.ch <- transport.RawLine{Err: io.EOF}
+		close(s.ch)
+	}
+	return nil
+}
+
+func (s *interactiveTransport) writtenLines() [][]byte {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([][]byte, len(s.writes))
+	copy(out, s.writes)
+	return out
+}
+
+func installInteractive(st *interactiveTransport) func() {
+	prev := transportFactory
+	transportFactory = func(transport.Config) transport.Transport { return st }
+	return func() { transportFactory = prev }
+}

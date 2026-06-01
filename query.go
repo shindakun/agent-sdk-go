@@ -2,7 +2,6 @@ package claude
 
 import (
 	"context"
-	"io"
 	"iter"
 )
 
@@ -20,42 +19,28 @@ import (
 //	    // type-switch on msg
 //	}
 func Query(ctx context.Context, prompt string, opts ...Option) iter.Seq2[Message, error] {
-	o := newOptions(opts...)
-
 	return func(yield func(Message, error) bool) {
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
-		sess := newSession(o)
-		// connect uses a nil inbound handler in M1; permissions/hooks/MCP are
-		// wired in later milestones.
-		if err := sess.connect(ctx, nil); err != nil {
+		client := NewClient(opts...)
+		if err := client.Connect(ctx); err != nil {
 			yield(nil, err)
 			return
 		}
-		defer sess.close()
+		defer client.Close()
 
-		if err := sess.sendPrompt(ctx, prompt); err != nil {
+		if err := client.Query(ctx, prompt); err != nil {
 			yield(nil, err)
 			return
 		}
 
-		for line := range sess.messages() {
-			msg, err := decodeMessageLine(line)
-			if err == io.EOF {
-				return
+		for msg, err := range client.Messages(ctx) {
+			if !yield(msg, err) {
+				return // consumer broke out; defer cancels + closes
 			}
 			if err != nil {
-				if !yield(nil, err) {
-					return
-				}
-				continue
-			}
-			if msg == nil {
-				continue // non-message frame; skip
-			}
-			if !yield(msg, nil) {
-				return // consumer broke out; defer cancels + closes
+				return
 			}
 		}
 	}
