@@ -1,0 +1,59 @@
+# Workflow
+
+```bash
+# Format and lint
+gofmt -w .
+go vet ./...
+
+# Build everything (library + examples)
+go build ./...
+
+# Unit tests (always with the race detector)
+go test -race ./...
+
+# Run a single test
+go test -race -run TestUnmarshalAssistant .
+
+# Integration tests against a real `claude` binary (excluded by default).
+# Requires `claude` on PATH and a working Claude Code auth session.
+go test -tags integration -timeout 600s ./...
+```
+
+# Codebase Structure
+
+Root package `claude` (import as `claude "github.com/shindakun/agent-sdk-go"`).
+The SDK is a thin driver over the `claude` CLI subprocess; the CLI owns the agent
+loop, built-in tools, and context management.
+
+- `query.go` — `Query` (one-shot, `iter.Seq2[Message,error]`) and `Collect`.
+- `client.go` / `client_control.go` — `Client` for interactive sessions, and the
+  SDK→CLI control methods (Interrupt, SetModel, GetServerInfo, …).
+- `session.go` — shared core: spawns the transport, runs the initialize
+  handshake, sends prompts, ends input, hosts the live store mirror.
+- `options.go` / `options_apply.go` — `Options` + `With*` functional options and
+  their mapping to CLI flags / the initialize request.
+- `message.go` / `message_unmarshal.go` / `content.go` — the `Message` and
+  `ContentBlock` discriminated unions and their JSON decoders.
+- `types.go` — remaining public types (thinking config, sandbox, rate limits,
+  context usage, MCP status, server-tool blocks, …).
+- `tool.go` / `mcp.go` / `mcp_dispatch.go` — in-process tools (`NewTool[T]`,
+  `SdkMcpServer`) and the `mcp_message` JSONRPC dispatch.
+- `hooks.go` / `hook_inputs.go` / `permission.go` / `dispatch.go` / `registry.go`
+  — hooks, typed hook inputs, permissions (`CanUseTool`), and inbound
+  control-request dispatch.
+- `sessions.go` / `session_store.go` / `mirror.go` — on-disk session reading,
+  the `SessionStore` family, and the live transcript mirror.
+- `internal/transport/` — subprocess management, binary discovery, stream-json
+  framing, stdin/stdout pumps, end-input, run-as-user (Unix).
+- `internal/protocol/` — the bidirectional control protocol: request/response
+  correlation, the initialize handshake, inbound dispatch.
+
+# Parity
+
+This is a faithful port of `anthropics/claude-agent-sdk-python`. A read-only
+clone of the upstream source is kept at `.parity-ref/claude-agent-sdk-python`
+(gitignored, pinned to the bundled CLI version). Before changing protocol or
+option behavior, diff against it — names, struct fields, enum values, and CLI
+flags. See [PARITY.md](PARITY.md). The installed `claude` should match the
+version the upstream SDK bundles (`_cli_version.py`); verify behavior with the
+integration tests, not just unit tests — static parity is not behavioral parity.

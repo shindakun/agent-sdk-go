@@ -18,13 +18,30 @@ levels — names, fields, and enum values — using AST extraction, not eyeballi
 
 Addresses [claude-agent-sdk-python#498](https://github.com/anthropics/claude-agent-sdk-python/issues/498).
 
-Every wire format was verified against the Python source. Notable details caught
-this way: a `CanUseTool` callback does **not** add `--permission-prompt-tool` (the
-CLI routes permission requests over the control protocol in stream-json mode);
-the `rate_limit_event` frame uses camelCase keys (`resetsAt`, `rateLimitType`…)
-though the public type is snake_case; and the session first-prompt summary skips
-synthetic lines (`<local-command-stdout>`, `<tick>`, IDE markers, interrupt
-notices) and extracts `<command-name>`.
+**Verified against Claude Code CLI 2.1.159** — the version the upstream SDK
+bundles (`_cli_version.py`), matching the installed binary. In addition to the
+static checks above, an integration suite (`go test -tags integration`) runs the
+**real binary** for: one-shot query, multi-turn client, custom Go tool, CanUseTool
+deny, PreToolUse hook, session resume, interrupt, and adaptive thinking. Static
+parity is necessary but not sufficient — two behavioral bugs (a one-shot stdin
+hang and a dead `CanUseTool`) were caught only by running the binary, plus a
+`--thinking` value bug caught by re-checking against 2.1.159.
+
+Notable wire details verified against the source:
+
+- A `CanUseTool` callback **must** add `--permission-prompt-tool stdio` (set by
+  the upstream `_internal/client.py`, emitted by `subprocess_cli.py`); it is
+  mutually exclusive with an explicit `WithPermissionPromptToolName`.
+- Thinking is driven by the typed `ThinkingConfig` union: `--thinking adaptive`,
+  `--max-thinking-tokens N` (enabled — no bare `--thinking`), `--thinking
+  disabled`, plus `--thinking-display`.
+- `rate_limit_event` uses camelCase keys (`resetsAt`, `rateLimitType`…) though
+  the public type is snake_case.
+- The session first-prompt summary skips synthetic lines
+  (`<local-command-stdout>`, `<tick>`, IDE markers, interrupt notices) and
+  extracts `<command-name>`.
+- One-shot `Query` closes stdin after the prompt (immediately, or after the first
+  result when SDK MCP/hooks/CanUseTool are configured) so the CLI exits.
 
 ## Core
 
