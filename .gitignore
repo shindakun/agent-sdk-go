@@ -17,3 +17,6 @@
 # Editor / OS
 .DS_Store
 *.swp
+
+# Local clone of the upstream Python SDK, kept for parity audits (not committed)
+/.parity-ref/

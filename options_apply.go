@@ -2,6 +2,7 @@ package claude
 
 import (
 	"encoding/json"
+	"fmt"
 	"sort"
 	"strconv"
 
@@ -104,11 +105,16 @@ func (o *Options) buildArgs() ([]string, error) {
 	if len(o.jsonSchema) > 0 {
 		args = append(args, "--json-schema", string(o.jsonSchema))
 	}
-	// In stream-json mode the CLI routes permission requests to the SDK over
-	// the control protocol automatically when a CanUseTool callback is present;
-	// no flag is required for that (matching the official SDKs). The
-	// --permission-prompt-tool flag is a separate, explicitly-configured option.
-	if o.permissionPromptToolName != "" {
+	// Permission routing. A CanUseTool callback requires the CLI to delegate
+	// permission prompts to the SDK over the control protocol; the official SDK
+	// does this by setting --permission-prompt-tool to "stdio". CanUseTool and an
+	// explicit permission-prompt-tool name are mutually exclusive.
+	switch {
+	case o.permissionPromptToolName != "" && o.canUseTool != nil:
+		return nil, fmt.Errorf("claude: WithCanUseTool and WithPermissionPromptToolName are mutually exclusive")
+	case o.canUseTool != nil:
+		args = append(args, "--permission-prompt-tool", "stdio")
+	case o.permissionPromptToolName != "":
 		args = append(args, "--permission-prompt-tool", o.permissionPromptToolName)
 	}
 	if o.continueConversation {

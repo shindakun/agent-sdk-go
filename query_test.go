@@ -170,16 +170,32 @@ func TestBuildArgsParityFlags(t *testing.T) {
 	}
 }
 
-func TestCanUseToolDoesNotForcePermissionPromptFlag(t *testing.T) {
-	// Setting CanUseTool must NOT inject --permission-prompt-tool; the CLI
-	// routes permission requests over the control protocol in stream-json mode.
+func TestCanUseToolSetsPermissionPromptToolStdio(t *testing.T) {
+	// A CanUseTool callback must add --permission-prompt-tool stdio so the CLI
+	// routes permission requests to the SDK over the control protocol. (Verified
+	// against the real binary: without it, can_use_tool is never sent.)
 	o := newOptions(WithCanUseTool(
 		func(ctx context.Context, tool string, in json.RawMessage, pc PermissionContext) (PermissionResult, error) {
 			return PermissionAllow{}, nil
 		}))
-	args, _ := o.buildArgs()
-	if argsContainsFlag(args, "--permission-prompt-tool") {
-		t.Errorf("CanUseTool should not add --permission-prompt-tool; args=%v", args)
+	args, err := o.buildArgs()
+	if err != nil {
+		t.Fatalf("buildArgs: %v", err)
+	}
+	if !argsContainPair(args, "--permission-prompt-tool", "stdio") {
+		t.Errorf("CanUseTool should add --permission-prompt-tool stdio; args=%v", args)
+	}
+}
+
+func TestCanUseToolAndPromptToolNameMutuallyExclusive(t *testing.T) {
+	o := newOptions(
+		WithCanUseTool(func(ctx context.Context, tool string, in json.RawMessage, pc PermissionContext) (PermissionResult, error) {
+			return PermissionAllow{}, nil
+		}),
+		WithPermissionPromptToolName("mcp__x__y"),
+	)
+	if _, err := o.buildArgs(); err == nil {
+		t.Error("expected an error when both CanUseTool and PermissionPromptToolName are set")
 	}
 }
 
