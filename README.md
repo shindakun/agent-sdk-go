@@ -60,7 +60,10 @@ Built milestone-by-milestone against the verified official wire protocol.
 - [x] **M3 — Permissions + hooks:** `CanUseTool` (allow with `updatedInput` /
       deny with `interrupt`) and lifecycle hooks (callback-id registration in
       the initialize handshake, `hook_callback` dispatch).
-- [ ] **M4 — In-process SDK MCP tools:** define Go tools the agent can call.
+- [x] **M4 — In-process SDK MCP tools:** define Go tools the agent can call
+      (`NewTool[T]` with reflection-derived schema, `SdkMcpServer`); `mcp_message`
+      JSONRPC dispatch (initialize / tools.list / tools.call) wrapped in
+      `mcp_response`.
 - [ ] **M5 — Full parity + examples.**
 
 ## Design
