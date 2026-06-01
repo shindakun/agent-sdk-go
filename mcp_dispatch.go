@@ -80,11 +80,15 @@ func (srv *SdkMcpServer) toolList() []map[string]any {
 		if len(schema) == 0 {
 			schema = json.RawMessage(`{"type":"object"}`)
 		}
-		out = append(out, map[string]any{
+		entry := map[string]any{
 			"name":        t.Name,
 			"description": t.Description,
 			"inputSchema": schema,
-		})
+		}
+		if t.Annotations != nil {
+			entry["annotations"] = t.Annotations
+		}
+		out = append(out, entry)
 	}
 	return out
 }

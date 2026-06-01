@@ -39,6 +39,17 @@ func (c *Client) SetPermissionMode(ctx context.Context, mode PermissionMode) err
 	return err
 }
 
+// GetServerInfo returns the CLI's initialization info captured during
+// [Client.Connect] — available commands, output styles, and server
+// capabilities. It returns nil if the client is not connected.
+func (c *Client) GetServerInfo(ctx context.Context) (json.RawMessage, error) {
+	sess, err := c.session()
+	if err != nil {
+		return nil, err
+	}
+	return sess.initResult, nil
+}
+
 // GetContextUsage returns the current context-window usage breakdown.
 func (c *Client) GetContextUsage(ctx context.Context) (ContextUsage, error) {
 	payload, err := c.sendControl(ctx, "get_context_usage", nil)
@@ -84,11 +95,12 @@ func (c *Client) StopTask(ctx context.Context, taskID string) error {
 	return err
 }
 
-// RewindFiles rewinds the working tree to a prior message state, when file
-// checkpointing is enabled. Fields holds any subtype-specific parameters (for
-// example a target message id); pass nil for the default rewind.
-func (c *Client) RewindFiles(ctx context.Context, fields map[string]any) error {
-	_, err := c.sendControl(ctx, "rewind_files", fields)
+// RewindFiles rewinds tracked files to their state at the given user message.
+// userMessageID is the uuid of a [UserMessage] received during the
+// conversation. Requires [WithEnableFileCheckpointing] and the
+// "replay-user-messages" extra arg.
+func (c *Client) RewindFiles(ctx context.Context, userMessageID string) error {
+	_, err := c.sendControl(ctx, "rewind_files", map[string]any{"user_message_id": userMessageID})
 	return err
 }
 

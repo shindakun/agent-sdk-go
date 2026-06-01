@@ -10,15 +10,16 @@ import (
 type HookEvent string
 
 const (
-	HookPreToolUse       HookEvent = "PreToolUse"
-	HookPostToolUse      HookEvent = "PostToolUse"
-	HookUserPromptSubmit HookEvent = "UserPromptSubmit"
-	HookStop             HookEvent = "Stop"
-	HookSubagentStop     HookEvent = "SubagentStop"
-	HookPreCompact       HookEvent = "PreCompact"
-	HookNotification     HookEvent = "Notification"
-	HookSessionStart     HookEvent = "SessionStart"
-	HookSessionEnd       HookEvent = "SessionEnd"
+	HookPreToolUse         HookEvent = "PreToolUse"
+	HookPostToolUse        HookEvent = "PostToolUse"
+	HookPostToolUseFailure HookEvent = "PostToolUseFailure"
+	HookUserPromptSubmit   HookEvent = "UserPromptSubmit"
+	HookStop               HookEvent = "Stop"
+	HookSubagentStop       HookEvent = "SubagentStop"
+	HookSubagentStart      HookEvent = "SubagentStart"
+	HookPreCompact         HookEvent = "PreCompact"
+	HookNotification       HookEvent = "Notification"
+	HookPermissionRequest  HookEvent = "PermissionRequest"
 )
 
 // HookCallback runs custom logic at a hook point. input is the raw event payload

@@ -69,13 +69,20 @@ func IsNotAMessage(err error) bool {
 }
 
 func decodeAssistant(b []byte) (Message, error) {
-	// Anthropic nests the model message under "message".
+	// Anthropic nests the model message under "message"; session_id/uuid/error
+	// and parent_tool_use_id are top-level.
 	var env struct {
 		Message struct {
-			Content json.RawMessage `json:"content"`
-			Model   string          `json:"model"`
+			Content    json.RawMessage `json:"content"`
+			Model      string          `json:"model"`
+			ID         string          `json:"id"`
+			StopReason string          `json:"stop_reason"`
+			Usage      *Usage          `json:"usage"`
 		} `json:"message"`
-		ParentToolUseID string `json:"parent_tool_use_id"`
+		ParentToolUseID string          `json:"parent_tool_use_id"`
+		SessionID       string          `json:"session_id"`
+		UUID            string          `json:"uuid"`
+		Error           json.RawMessage `json:"error"`
 	}
 	if err := json.Unmarshal(b, &env); err != nil {
 		return nil, &MessageParseError{Type: "assistant", Raw: clone(b), Err: err}
@@ -88,6 +95,12 @@ func decodeAssistant(b []byte) (Message, error) {
 		Content:         blocks,
 		Model:           env.Message.Model,
 		ParentToolUseID: env.ParentToolUseID,
+		MessageID:       env.Message.ID,
+		StopReason:      env.Message.StopReason,
+		SessionID:       env.SessionID,
+		UUID:            env.UUID,
+		Usage:           env.Message.Usage,
+		Error:           env.Error,
 		Raw:             clone(b),
 	}, nil
 }
@@ -97,7 +110,9 @@ func decodeUser(b []byte) (Message, error) {
 		Message struct {
 			Content json.RawMessage `json:"content"`
 		} `json:"message"`
-		ParentToolUseID string `json:"parent_tool_use_id"`
+		ParentToolUseID string          `json:"parent_tool_use_id"`
+		UUID            string          `json:"uuid"`
+		ToolUseResult   json.RawMessage `json:"tool_use_result"`
 	}
 	if err := json.Unmarshal(b, &env); err != nil {
 		return nil, &MessageParseError{Type: "user", Raw: clone(b), Err: err}
@@ -109,6 +124,8 @@ func decodeUser(b []byte) (Message, error) {
 	return &UserMessage{
 		Content:         blocks,
 		ParentToolUseID: env.ParentToolUseID,
+		UUID:            env.UUID,
+		ToolUseResult:   env.ToolUseResult,
 		Raw:             clone(b),
 	}, nil
 }

@@ -19,6 +19,12 @@ type AssistantMessage struct {
 	// ParentToolUseID is set when this message originates inside a subagent's
 	// context, identifying the Agent tool call that spawned it.
 	ParentToolUseID string
+	MessageID       string          `json:"message_id,omitempty"`
+	StopReason      string          `json:"stop_reason,omitempty"`
+	SessionID       string          `json:"session_id,omitempty"`
+	UUID            string          `json:"uuid,omitempty"`
+	Usage           *Usage          `json:"usage,omitempty"`
+	Error           json.RawMessage `json:"error,omitempty"`
 	// Raw is the undecoded JSON of the message for forward-compatibility.
 	Raw json.RawMessage
 }
@@ -29,6 +35,8 @@ func (*AssistantMessage) isMessage() {}
 type UserMessage struct {
 	Content         []ContentBlock
 	ParentToolUseID string
+	UUID            string          `json:"uuid,omitempty"`
+	ToolUseResult   json.RawMessage `json:"tool_use_result,omitempty"`
 	Raw             json.RawMessage
 }
 
@@ -49,12 +57,6 @@ type SystemMessage struct {
 
 func (*SystemMessage) isMessage() {}
 
-// ResultError is one error entry in a [ResultMessage].
-type ResultError struct {
-	Message string `json:"message"`
-	Type    string `json:"type,omitempty"`
-}
-
 // Usage reports token usage for a turn or result.
 type Usage struct {
 	InputTokens              int `json:"input_tokens"`
@@ -65,16 +67,22 @@ type Usage struct {
 
 // ResultMessage terminates a turn, summarizing cost, duration, and outcome.
 type ResultMessage struct {
-	Subtype      string        `json:"subtype"`
-	IsError      bool          `json:"is_error"`
-	Errors       []ResultError `json:"errors,omitempty"`
-	DurationMs   int           `json:"duration_ms"`
-	NumTurns     int           `json:"num_turns"`
-	TotalCostUSD float64       `json:"total_cost_usd"`
-	Usage        Usage         `json:"usage"`
-	Result       string        `json:"result"`
-	SessionID    string        `json:"session_id"`
-	Raw          json.RawMessage
+	Subtype           string           `json:"subtype"`
+	IsError           bool             `json:"is_error"`
+	Errors            []string         `json:"errors,omitempty"`
+	DurationMs        int              `json:"duration_ms"`
+	DurationAPIMs     int              `json:"duration_api_ms,omitempty"`
+	NumTurns          int              `json:"num_turns"`
+	StopReason        string           `json:"stop_reason,omitempty"`
+	TotalCostUSD      float64          `json:"total_cost_usd,omitempty"`
+	Usage             Usage            `json:"usage"`
+	ModelUsage        json.RawMessage  `json:"model_usage,omitempty"`
+	Result            string           `json:"result,omitempty"`
+	StructuredOutput  json.RawMessage  `json:"structured_output,omitempty"`
+	PermissionDenials json.RawMessage  `json:"permission_denials,omitempty"`
+	DeferredToolUse   *DeferredToolUse `json:"deferred_tool_use,omitempty"`
+	SessionID         string           `json:"session_id"`
+	Raw               json.RawMessage
 }
 
 func (*ResultMessage) isMessage() {}
@@ -82,6 +90,7 @@ func (*ResultMessage) isMessage() {}
 // StreamEvent is a partial/delta event, emitted only when partial messages are
 // enabled. Event holds the raw streaming event payload.
 type StreamEvent struct {
+	UUID            string          `json:"uuid,omitempty"`
 	SessionID       string          `json:"session_id"`
 	ParentToolUseID string          `json:"parent_tool_use_id,omitempty"`
 	Event           json.RawMessage `json:"event"`

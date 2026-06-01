@@ -180,3 +180,57 @@ func TestImportSessionToStore(t *testing.T) {
 		t.Errorf("imported %d entries, want 2", len(entries))
 	}
 }
+
+func TestAssistantMessageFullFields(t *testing.T) {
+	line := []byte(`{"type":"assistant","parent_tool_use_id":"pt","session_id":"s1","uuid":"u1","message":{"model":"m","id":"msg_1","stop_reason":"end_turn","usage":{"input_tokens":3,"output_tokens":4},"content":[{"type":"text","text":"hi"}]}}`)
+	msg, err := UnmarshalMessage(line)
+	if err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	am := msg.(*AssistantMessage)
+	if am.MessageID != "msg_1" || am.StopReason != "end_turn" || am.SessionID != "s1" || am.UUID != "u1" {
+		t.Errorf("assistant fields = %+v", am)
+	}
+	if am.Usage == nil || am.Usage.InputTokens != 3 || am.Usage.OutputTokens != 4 {
+		t.Errorf("usage = %+v", am.Usage)
+	}
+}
+
+func TestResultErrorsAreStrings(t *testing.T) {
+	// Python's ResultMessage.errors is list[str]; ensure we decode that shape.
+	line := []byte(`{"type":"result","subtype":"error_max_turns","is_error":true,"errors":["boom","again"],"duration_ms":1,"duration_api_ms":2,"num_turns":1,"session_id":"s","stop_reason":"max_turns"}`)
+	msg, err := UnmarshalMessage(line)
+	if err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	rm := msg.(*ResultMessage)
+	if len(rm.Errors) != 2 || rm.Errors[0] != "boom" {
+		t.Errorf("errors = %v", rm.Errors)
+	}
+	if rm.DurationAPIMs != 2 || rm.StopReason != "max_turns" {
+		t.Errorf("result extra fields = %+v", rm)
+	}
+}
+
+func TestHookEventValuesMatchPython(t *testing.T) {
+	// The full set of 10 hook events from the Python HookEvent union.
+	want := []HookEvent{
+		HookPreToolUse, HookPostToolUse, HookPostToolUseFailure, HookUserPromptSubmit,
+		HookStop, HookSubagentStop, HookSubagentStart, HookPreCompact,
+		HookNotification, HookPermissionRequest,
+	}
+	wantStr := map[string]bool{
+		"PreToolUse": true, "PostToolUse": true, "PostToolUseFailure": true,
+		"UserPromptSubmit": true, "Stop": true, "SubagentStop": true,
+		"SubagentStart": true, "PreCompact": true, "Notification": true,
+		"PermissionRequest": true,
+	}
+	if len(want) != len(wantStr) {
+		t.Fatalf("want set size mismatch")
+	}
+	for _, e := range want {
+		if !wantStr[string(e)] {
+			t.Errorf("unexpected hook event value %q", e)
+		}
+	}
+}

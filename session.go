@@ -29,6 +29,9 @@ type session struct {
 	registry  *callbackRegistry
 	mirror    *mirrorBatcher
 	injectCh  chan Message
+	// initResult is the CLI's initialize response, surfaced via
+	// Client.GetServerInfo.
+	initResult json.RawMessage
 }
 
 func newSession(opts *Options) *session {
@@ -85,10 +88,12 @@ func (s *session) connect(ctx context.Context) error {
 
 	s.engine.Start()
 
-	if _, err := s.engine.Initialize(ctx, init, s.opts.loadTimeout); err != nil {
+	initResult, err := s.engine.Initialize(ctx, init, s.opts.loadTimeout)
+	if err != nil {
 		_ = s.t.Close()
 		return &ConnectionError{Err: err}
 	}
+	s.initResult = initResult
 	return nil
 }
 

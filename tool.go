@@ -18,6 +18,8 @@ type Tool struct {
 	// InputSchema is the tool's JSON Schema. When nil, an empty object schema
 	// is advertised.
 	InputSchema json.RawMessage
+	// Annotations advertises behavior hints (read-only, destructive, ...).
+	Annotations *ToolAnnotations
 	Handler     ToolHandler
 }
 
