@@ -43,11 +43,12 @@ func (s *session) connect(ctx context.Context) error {
 	}
 
 	s.t = transportFactory(transport.Config{
-		CLIPath: s.opts.cliPath,
-		Args:    args,
-		Cwd:     s.opts.cwd,
-		Env:     s.opts.env,
-		Stderr:  s.opts.stderr,
+		CLIPath:    s.opts.cliPath,
+		Args:       args,
+		Cwd:        s.opts.cwd,
+		Env:        s.opts.env,
+		Stderr:     s.opts.stderr,
+		SDKVersion: Version,
 	})
 
 	if err := s.t.Connect(ctx); err != nil {

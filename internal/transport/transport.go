@@ -43,6 +43,8 @@ type Config struct {
 	// Stderr, if set, receives the subprocess's stderr in addition to the
 	// internal capture buffer.
 	Stderr io.Writer
+	// SDKVersion is reported to the CLI via CLAUDE_AGENT_SDK_VERSION.
+	SDKVersion string
 }
 
 // CLINotFoundError reports that the CLI binary could not be located.

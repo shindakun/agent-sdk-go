@@ -96,6 +96,12 @@ func (t *subprocessTransport) buildEnv() []string {
 	env := os.Environ()
 	// Mark the entrypoint so the CLI knows it is driven by an SDK.
 	merged := map[string]string{"CLAUDE_CODE_ENTRYPOINT": "sdk-go"}
+	if t.cfg.SDKVersion != "" {
+		merged["CLAUDE_AGENT_SDK_VERSION"] = t.cfg.SDKVersion
+	}
+	if t.cfg.Cwd != "" {
+		merged["PWD"] = t.cfg.Cwd
+	}
 	for k, v := range t.cfg.Env {
 		merged[k] = v
 	}

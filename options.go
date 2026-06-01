@@ -34,25 +34,29 @@ type thinkingConfig struct {
 // functional options rather than setting fields directly.
 type Options struct {
 	// CLI-flag-mapped configuration.
-	model           string
-	fallbackModel   string
-	systemPrompt    systemPromptConfig
-	allowedTools    []string
-	disallowedTools []string
-	maxTurns        int
-	maxBudgetUSD    float64
-	betas           []string
-	thinking        thinkingConfig
-	settings        string
-	addDirs         []string
-	permissionMode  PermissionMode
-	resume          string
-	forkSession     bool
-	cwd             string
-	env             map[string]string
-	pluginDirs      []string
-	jsonSchema      json.RawMessage
-	extraArgs       map[string]*string
+	model                    string
+	fallbackModel            string
+	systemPrompt             systemPromptConfig
+	allowedTools             []string
+	disallowedTools          []string
+	maxTurns                 int
+	maxBudgetUSD             float64
+	betas                    []string
+	thinking                 thinkingConfig
+	settings                 string
+	addDirs                  []string
+	permissionMode           PermissionMode
+	permissionPromptToolName string
+	resume                   string
+	forkSession              bool
+	continueConversation     bool
+	includePartialMessages   bool
+	settingSources           []string
+	cwd                      string
+	env                      map[string]string
+	pluginDirs               []string
+	jsonSchema               json.RawMessage
+	extraArgs                map[string]*string
 
 	// initialize-request-mapped configuration.
 	hooks                  map[HookEvent][]HookMatcher
@@ -162,6 +166,31 @@ func WithResume(sessionID string) Option {
 // than continuing it in place.
 func WithForkSession() Option {
 	return func(o *Options) { o.forkSession = true }
+}
+
+// WithContinueConversation continues the most recent conversation.
+func WithContinueConversation() Option {
+	return func(o *Options) { o.continueConversation = true }
+}
+
+// WithIncludePartialMessages enables partial/streaming message events
+// ([StreamEvent]).
+func WithIncludePartialMessages() Option {
+	return func(o *Options) { o.includePartialMessages = true }
+}
+
+// WithSettingSources controls which filesystem settings sources the CLI loads
+// (for example "user", "project", "local"). When unset, the CLI default
+// applies.
+func WithSettingSources(sources ...string) Option {
+	return func(o *Options) { o.settingSources = append(o.settingSources, sources...) }
+}
+
+// WithPermissionPromptToolName sets the MCP tool the CLI uses to prompt for
+// permission decisions. This is independent of [WithCanUseTool], which receives
+// decisions over the control protocol.
+func WithPermissionPromptToolName(name string) Option {
+	return func(o *Options) { o.permissionPromptToolName = name }
 }
 
 // WithCwd sets the working directory for the CLI subprocess.

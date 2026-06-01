@@ -71,6 +71,14 @@ func (c *Client) StopTask(ctx context.Context, taskID string) error {
 	return err
 }
 
+// RewindFiles rewinds the working tree to a prior message state, when file
+// checkpointing is enabled. Fields holds any subtype-specific parameters (for
+// example a target message id); pass nil for the default rewind.
+func (c *Client) RewindFiles(ctx context.Context, fields map[string]any) error {
+	_, err := c.sendControl(ctx, "rewind_files", fields)
+	return err
+}
+
 // sendControl issues an SDK->CLI control request via the session engine.
 func (c *Client) sendControl(ctx context.Context, subtype string, extra map[string]any) (json.RawMessage, error) {
 	sess, err := c.session()

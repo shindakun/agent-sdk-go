@@ -4,6 +4,10 @@ A Go SDK for building agents with Claude Code — a faithful, idiomatic-Go port 
 Anthropic's official [Claude Agent SDK](https://platform.claude.com/docs/en/agent-sdk/overview)
 (Python and TypeScript).
 
+This addresses [anthropics/claude-agent-sdk-python#498](https://github.com/anthropics/claude-agent-sdk-python/issues/498),
+the upstream request for Go/Golang SDK support — native Go client, tool use and
+MCP integration, streaming over channels, and `context.Context` cancellation.
+
 Like the official SDKs, this is **not** a reimplementation of the agent loop. It
 drives the user-installed `claude` Code CLI binary as a subprocess, speaking
 newline-delimited `stream-json` over the subprocess's stdin/stdout plus a
@@ -64,7 +68,26 @@ Built milestone-by-milestone against the verified official wire protocol.
       (`NewTool[T]` with reflection-derived schema, `SdkMcpServer`); `mcp_message`
       JSONRPC dispatch (initialize / tools.list / tools.call) wrapped in
       `mcp_response`.
-- [ ] **M5 — Full parity + examples.**
+- [x] **M5 — Full parity + examples:** remaining flags (`--include-partial-messages`,
+      `--setting-sources`, `--continue`, fallback model, thinking/effort, budget,
+      plugins) and env vars (`CLAUDE_AGENT_SDK_VERSION`, `PWD`); `RewindFiles`;
+      runnable [examples](examples/) for one-shot query, interactive sessions,
+      and a custom Go tool.
+
+> Fidelity note: each milestone's wire format was checked against the official
+> `claude-agent-sdk-python` source. One correction surfaced in M5 — a
+> `CanUseTool` callback must **not** add `--permission-prompt-tool`; in
+> stream-json mode the CLI routes permission requests to the SDK over the
+> control protocol automatically.
+
+## Parity
+
+The core agent-driving surface (query, interactive client, options, messages,
+tools, MCP, permissions, hooks, subagents, control requests, errors) is at
+parity with the official Python SDK, with each wire format verified against its
+source. A session-management subsystem, typed hook inputs, sandbox/rate-limit
+types, and most examples are deferred to follow-up milestones. See
+[PARITY.md](PARITY.md) for the full breakdown.
 
 ## Design
 
@@ -73,4 +96,4 @@ details.
 
 ## License
 
-To be determined.
+[MIT](LICENSE).

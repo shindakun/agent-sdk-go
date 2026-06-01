@@ -76,9 +76,21 @@ func (o *Options) buildArgs() ([]string, error) {
 	if len(o.jsonSchema) > 0 {
 		args = append(args, "--json-schema", string(o.jsonSchema))
 	}
-	// can_use_tool requires the CLI to delegate permission prompts to the SDK.
-	if o.canUseTool != nil {
-		args = append(args, "--permission-prompt-tool", "stdio")
+	// In stream-json mode the CLI routes permission requests to the SDK over
+	// the control protocol automatically when a CanUseTool callback is present;
+	// no flag is required for that (matching the official SDKs). The
+	// --permission-prompt-tool flag is a separate, explicitly-configured option.
+	if o.permissionPromptToolName != "" {
+		args = append(args, "--permission-prompt-tool", o.permissionPromptToolName)
+	}
+	if o.continueConversation {
+		args = append(args, "--continue")
+	}
+	if o.includePartialMessages {
+		args = append(args, "--include-partial-messages")
+	}
+	if len(o.settingSources) > 0 {
+		args = append(args, "--setting-sources", joinComma(o.settingSources))
 	}
 
 	mcpArg, err := o.buildMcpConfig()

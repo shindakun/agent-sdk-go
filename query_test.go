@@ -121,6 +121,77 @@ func TestBuildArgsMapping(t *testing.T) {
 	}
 }
 
+func TestBuildArgsParityFlags(t *testing.T) {
+	o := newOptions(
+		WithIncludePartialMessages(),
+		WithSettingSources("user", "project"),
+		WithContinueConversation(),
+		WithResume("sess_7"),
+		WithForkSession(),
+		WithPermissionPromptToolName("mcp__perm__prompt"),
+		WithFallbackModel("haiku"),
+		WithMaxBudgetUSD(2.5),
+		WithThinking(8000, "high"),
+		WithAddDir("/a", "/b"),
+		WithPluginDir("/p"),
+	)
+	args, err := o.buildArgs()
+	if err != nil {
+		t.Fatalf("buildArgs: %v", err)
+	}
+	if !argsContainsFlag(args, "--include-partial-messages") {
+		t.Error("missing --include-partial-messages")
+	}
+	if !argsContainsFlag(args, "--continue") {
+		t.Error("missing --continue")
+	}
+	if !argsContainsFlag(args, "--fork-session") {
+		t.Error("missing --fork-session")
+	}
+	if !argsContainsFlag(args, "--thinking") {
+		t.Error("missing --thinking")
+	}
+	for flag, val := range map[string]string{
+		"--setting-sources":        "user,project",
+		"--resume":                 "sess_7",
+		"--permission-prompt-tool": "mcp__perm__prompt",
+		"--fallback-model":         "haiku",
+		"--max-budget-usd":         "2.5",
+		"--max-thinking-tokens":    "8000",
+		"--effort":                 "high",
+	} {
+		if !argsContainPair(args, flag, val) {
+			t.Errorf("missing %s %s; args=%v", flag, val, args)
+		}
+	}
+	// --add-dir appears once per directory.
+	if !argsContainPair(args, "--add-dir", "/a") || !argsContainPair(args, "--add-dir", "/b") {
+		t.Errorf("missing per-dir --add-dir; args=%v", args)
+	}
+}
+
+func TestCanUseToolDoesNotForcePermissionPromptFlag(t *testing.T) {
+	// Setting CanUseTool must NOT inject --permission-prompt-tool; the CLI
+	// routes permission requests over the control protocol in stream-json mode.
+	o := newOptions(WithCanUseTool(
+		func(ctx context.Context, tool string, in json.RawMessage, pc PermissionContext) (PermissionResult, error) {
+			return PermissionAllow{}, nil
+		}))
+	args, _ := o.buildArgs()
+	if argsContainsFlag(args, "--permission-prompt-tool") {
+		t.Errorf("CanUseTool should not add --permission-prompt-tool; args=%v", args)
+	}
+}
+
+func argsContainsFlag(args []string, flag string) bool {
+	for _, a := range args {
+		if a == flag {
+			return true
+		}
+	}
+	return false
+}
+
 func argsContainPair(args []string, flag, val string) bool {
 	for i := 0; i+1 < len(args); i++ {
 		if args[i] == flag && args[i+1] == val {
