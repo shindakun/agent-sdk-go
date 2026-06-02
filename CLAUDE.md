@@ -17,7 +17,16 @@ go test -race -run TestUnmarshalAssistant .
 # Integration tests against a real `claude` binary (excluded by default).
 # Requires `claude` on PATH and a working Claude Code auth session.
 go test -tags integration -timeout 600s ./...
+
+# Full e2e tier (paid API calls) and the example runner.
+go test -tags e2e -timeout 1200s ./...
+bash scripts/run-examples.sh
 ```
+
+CI lives in `.github/workflows/`: `lint` and `test` (race, OS matrix) run on
+every PR/push; `e2e` is manual (`workflow_dispatch`) and needs an
+`ANTHROPIC_API_KEY` secret. The lint/test jobs mirror the local `gofmt`/`vet`/
+`go test -race` commands above, so a green local run predicts green CI.
 
 # Codebase Structure
 

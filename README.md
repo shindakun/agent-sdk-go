@@ -1,5 +1,8 @@
 # agent-sdk-go
 
+[![Lint](https://github.com/shindakun/agent-sdk-go/actions/workflows/lint.yml/badge.svg)](https://github.com/shindakun/agent-sdk-go/actions/workflows/lint.yml)
+[![Test](https://github.com/shindakun/agent-sdk-go/actions/workflows/test.yml/badge.svg)](https://github.com/shindakun/agent-sdk-go/actions/workflows/test.yml)
+
 A Go SDK for building agents with Claude Code — a faithful, idiomatic-Go port of
 Anthropic's official [Claude Agent SDK](https://platform.claude.com/docs/en/agent-sdk/overview)
 (Python and TypeScript). Addresses
@@ -186,8 +189,22 @@ go build ./...          # library + examples
 go vet ./...
 gofmt -l .
 go test -race ./...                       # unit tests
-go test -tags integration -timeout 600s   # against a real claude binary
+go test -tags integration -timeout 600s   # smoke tier against a real claude binary
+go test -tags e2e -timeout 1200s          # full e2e tier (paid API calls)
+bash scripts/run-examples.sh              # run every example against the binary
 ```
+
+### CI
+
+GitHub Actions:
+
+- **Lint** and **Test** run on every pull request and push to `main` —
+  `gofmt`/`go vet`/build, and `go test -race` across Linux/macOS/Windows. Free,
+  no secrets.
+- **E2E** is manual (`workflow_dispatch`): it installs `claude`, runs the
+  `e2e`-tagged tests and every example against the real binary. It needs an
+  `ANTHROPIC_API_KEY` repo secret and makes paid API calls, so it is not run
+  automatically.
 
 See [CLAUDE.md](CLAUDE.md) for the codebase map and the parity workflow.
 

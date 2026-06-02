@@ -41,6 +41,11 @@ All notable changes to this project are documented here. The format is based on
 - `SupportedCLIVersion` constant (mirrors upstream's `_cli_version.py`, pinned to
   `2.1.159`) plus `CLIVersion()` / `CheckCLIVersion()` to report the installed
   binary's version and flag a mismatch.
+- GitHub Actions CI: `Lint` (gofmt/vet/build) and `Test` (`go test -race` across
+  Linux/macOS/Windows) on every PR/push; a manual-only `E2E` workflow that
+  installs `claude` and runs the e2e tests + examples (the Go analogues of
+  upstream's `lint.yml` / `test.yml`; Python packaging workflows have no Go
+  equivalent).
 
 ## Earlier (M1–M8)
 
@@ -52,6 +57,6 @@ official wire protocol:
 - M2 — control protocol + interactive `Client`; SDK→CLI control methods.
 - M3 — permissions (`CanUseTool`) and lifecycle hooks.
 - M4 — in-process SDK MCP tools (`NewTool[T]`, `mcp_message` dispatch).
-- M5–M8 — full name-for-name parity: all options/flags, session reading + store
-  + mutations, sandbox/rate-limit/context-usage types, server-tool blocks, task
+- M5–M8 — full name-for-name parity: all options/flags, session reading, store,
+  mutations, sandbox/rate-limit/context-usage types, server-tool blocks, task
   lifecycle messages, typed hook inputs; mechanically verified 123/123 names.
