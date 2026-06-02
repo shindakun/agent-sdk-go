@@ -44,6 +44,13 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- **Upstream watch** workflow + `scripts/upstream-watch.sh`: a daily (and
+  on-demand) job that watches `anthropics/claude-agent-sdk-python` and files
+  triage issues here — a rollup for CLI-version bumps, Claude-triaged labeled
+  issues for SDK-source commits (with diff link + port recommendation), and
+  ignores docs/test/example commits. Idempotent, `DRY_RUN` support, and
+  prompt-injection hardened (commit messages/diffs treated as untrusted data; the
+  model can only suggest a label, never act). Needs an `ANTHROPIC_API_KEY` secret.
 - `CLAUDE.md`, this changelog, and 9 new examples (16 total) mapped 1:1 to the
   upstream Python examples plus Go-idiomatic extras (collect, interrupt,
   thinking). See `examples/README.md`.

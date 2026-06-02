@@ -79,3 +79,9 @@ The known-good CLI version is pinned as `SupportedCLIVersion` in
 `_cli_version.py`). When upstream bumps its bundled CLI, update the clone, this
 const, and re-run the audits. `CLIVersion()` / `CheckCLIVersion()` report the
 installed binary's version at runtime.
+
+The `Upstream watch` workflow ([scripts/upstream-watch.sh](scripts/upstream-watch.sh))
+files triage issues for new upstream commits — a rollup for CLI bumps and
+Claude-triaged issues for SDK-source changes — so parity work has a queue. Run it
+locally with `DRY_RUN=1` and a `GH_TOKEN` (+ `ANTHROPIC_API_KEY` to exercise
+triage).

@@ -206,6 +206,16 @@ GitHub Actions:
   `e2e`-tagged tests and every example against the real binary. It needs an
   `ANTHROPIC_API_KEY` repo secret and makes paid API calls, so it is not run
   automatically.
+- **Upstream watch** runs daily (and on demand): it watches
+  `anthropics/claude-agent-sdk-python` for new commits and files triage issues
+  here. Pure CLI-version bumps roll into one `Upstream CLI version bumps` issue;
+  commits touching SDK source are classified by Claude and get an individual
+  labeled issue with the diff link and a port recommendation; docs/test/example
+  commits are ignored. It needs the `ANTHROPIC_API_KEY` secret. The triage prompt
+  treats commit messages and diffs as untrusted data (prompt-injection hardened),
+  and the model can only *suggest* a label — it never decides whether to file or
+  takes any action. Logic lives in [`scripts/upstream-watch.sh`](scripts/upstream-watch.sh)
+  and is runnable locally with `DRY_RUN=1`.
 
 See [CLAUDE.md](CLAUDE.md) for the codebase map and the parity workflow.
 
