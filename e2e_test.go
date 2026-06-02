@@ -435,3 +435,87 @@ func itoaE2E(n int) string {
 	}
 	return string(b)
 }
+
+// --- Client.ReceiveResponse / QuerySession -----------------------------------
+
+func TestE2EReceiveResponse(t *testing.T) {
+	e2eSkip(t)
+	ctx, cancel := e2eCtx(t)
+	defer cancel()
+
+	client := NewClient()
+	if err := client.Connect(ctx); err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	if err := client.Query(ctx, "Reply with exactly: ok"); err != nil {
+		t.Fatalf("query: %v", err)
+	}
+
+	var sawResult bool
+	var afterResult int
+	for msg, err := range client.ReceiveResponse(ctx) {
+		if err != nil {
+			t.Fatalf("stream: %v", err)
+		}
+		if sawResult {
+			afterResult++ // nothing should be yielded after the result
+		}
+		if _, ok := msg.(*ResultMessage); ok {
+			sawResult = true
+		}
+	}
+	if !sawResult {
+		t.Error("ReceiveResponse never yielded a ResultMessage")
+	}
+	if afterResult != 0 {
+		t.Errorf("ReceiveResponse yielded %d messages after the result", afterResult)
+	}
+}
+
+func TestE2EQuerySessionMultiTurn(t *testing.T) {
+	e2eSkip(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	client := NewClient()
+	if err := client.Connect(ctx); err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	// First turn: capture the session id and seed context.
+	var sid string
+	if err := client.Query(ctx, "Remember the word: kumquat. Reply 'ok'."); err != nil {
+		t.Fatalf("query 1: %v", err)
+	}
+	for msg, err := range client.ReceiveResponse(ctx) {
+		if err != nil {
+			t.Fatalf("stream 1: %v", err)
+		}
+		if sm, ok := msg.(*SystemMessage); ok && sm.Subtype == "init" {
+			sid = sm.SessionID
+		}
+	}
+	if sid == "" {
+		t.Fatal("no session id captured")
+	}
+
+	// Second turn addressed explicitly to that session id.
+	if err := client.QuerySession(ctx, "What word did I ask you to remember? Reply with only that word.", sid); err != nil {
+		t.Fatalf("query session: %v", err)
+	}
+	var result *ResultMessage
+	for msg, err := range client.ReceiveResponse(ctx) {
+		if err != nil {
+			t.Fatalf("stream 2: %v", err)
+		}
+		if rm, ok := msg.(*ResultMessage); ok {
+			result = rm
+		}
+	}
+	if result == nil || !strings.Contains(strings.ToLower(result.Result), "kumquat") {
+		t.Errorf("QuerySession lost context; result = %+v", result)
+	}
+}
