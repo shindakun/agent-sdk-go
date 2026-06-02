@@ -29,8 +29,11 @@ jobs:
 
       - name: Run upstream watcher
         env:
-          # GH_TOKEN authorizes gh for issues/variables in this repo.
+          # GH_TOKEN authorizes gh for issues in this repo. The Actions variables
+          # API is not writable by github.token, so the SHA-state get/set uses
+          # WATCH_PAT (a PAT with Variables:write) when present.
           GH_TOKEN: ${{ github.token }}
+          WATCH_PAT: ${{ secrets.WATCH_PAT }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           SELF_REPO: ${{ github.repository }}
           DRY_RUN: ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '1' || '0' }}

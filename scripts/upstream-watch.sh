@@ -31,8 +31,19 @@ log() { printf '%s\n' "$*" >&2; }
 
 # --- GitHub state (last processed sha) ---------------------------------------
 
+# The Actions variables API is not writable by GITHUB_TOKEN (403). When a PAT
+# with Variables:write is provided as WATCH_PAT, use it for variable get/set;
+# otherwise fall back to the default token (reads usually work; writes will warn).
+gh_vars() {
+	if [ -n "${WATCH_PAT:-}" ]; then
+		GH_TOKEN="$WATCH_PAT" gh "$@"
+	else
+		gh "$@"
+	fi
+}
+
 get_last_sha() {
-	gh variable get UPSTREAM_LAST_SHA --repo "$SELF_REPO" 2>/dev/null || true
+	gh_vars variable get UPSTREAM_LAST_SHA --repo "$SELF_REPO" 2>/dev/null || true
 }
 
 set_last_sha() {
@@ -41,7 +52,9 @@ set_last_sha() {
 		log "[dry-run] would set UPSTREAM_LAST_SHA=$sha"
 		return
 	fi
-	gh variable set UPSTREAM_LAST_SHA --repo "$SELF_REPO" --body "$sha"
+	if ! gh_vars variable set UPSTREAM_LAST_SHA --repo "$SELF_REPO" --body "$sha"; then
+		log "WARNING: could not persist UPSTREAM_LAST_SHA (need a WATCH_PAT secret with Variables:write); next run may re-process recent commits"
+	fi
 }
 
 ensure_labels() {
@@ -142,6 +155,14 @@ append_cli_bump() {
 			--label "upstream" --label "upstream:cli-bump" \
 			--body "Running log of upstream Claude Code CLI version bumps. Each entry needs a \`SupportedCLIVersion\` bump + parity re-check." \
 			| grep -oE '[0-9]+$')"
+	else
+		# Idempotency: if this SHA is already recorded in the rollup (issue body
+		# or a comment), don't append it again (e.g. after a failed state write).
+		if gh issue view "$num" --repo "$SELF_REPO" --json body,comments \
+			--jq '[.body, (.comments[].body)] | join("\n")' 2>/dev/null | grep -qF "${sha:0:7}"; then
+			log "CLI bump ${sha:0:7} already in rollup issue #$num; skipping"
+			return
+		fi
 	fi
 	printf '%s\n' "$body" | gh issue comment "$num" --repo "$SELF_REPO" --body-file -
 	log "appended CLI bump ${sha:0:7} to rollup issue #$num"
