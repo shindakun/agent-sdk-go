@@ -41,9 +41,17 @@ func writeSession(t *testing.T, home, cwd, id string, lines ...string) {
 	}
 }
 
+// setHomeDir points os.UserHomeDir() at home on all platforms (HOME on Unix,
+// USERPROFILE on Windows).
+func setHomeDir(t *testing.T, home string) {
+	t.Helper()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+}
+
 func TestListAndReadSessions(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setHomeDir(t, home)
 	cwd := "/work/proj"
 
 	writeSession(t, home, cwd, "sess-a",
@@ -100,7 +108,7 @@ func TestListAndReadSessions(t *testing.T) {
 
 func TestListSessionsMissingDirIsEmpty(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setHomeDir(t, home)
 	infos, err := ListSessions("/nonexistent/dir", 0, 0)
 	if err != nil {
 		t.Fatalf("err: %v", err)
@@ -112,7 +120,7 @@ func TestListSessionsMissingDirIsEmpty(t *testing.T) {
 
 func TestSubagents(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setHomeDir(t, home)
 	cwd := "/work/proj"
 
 	writeSession(t, home, cwd, "sess-c",

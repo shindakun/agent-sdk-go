@@ -36,6 +36,8 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v7
         with:
-          version: v2.1.6
+          # Must be built with Go >= the module's go directive (1.26); older
+          # golangci-lint binaries refuse to load a newer-targeted config.
+          version: v2.12.2
           # The repo .golangci.yml (version "2") sets build-tags so the
           # integration/e2e files are linted too.

@@ -160,7 +160,7 @@ func TestFoldSessionSummary(t *testing.T) {
 
 func TestImportSessionToStore(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setHomeDir(t, home)
 	cwd := "/work/imp"
 	writeSession(t, home, cwd, "imp-1",
 		`{"type":"user","uuid":"u1","sessionId":"imp-1","message":{"content":"hi"}}`,

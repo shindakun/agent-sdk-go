@@ -63,11 +63,10 @@ func isExecutable(path string) bool {
 	if err != nil {
 		return false
 	}
-	// Require a regular file with an executable bit — reject directories,
-	// FIFOs, devices, sockets, and other irregular modes that could be an
-	// execution vector.
+	// Require a regular file — reject directories, FIFOs, devices, sockets, and
+	// other irregular modes that could be an execution vector.
 	if !info.Mode().IsRegular() {
 		return false
 	}
-	return info.Mode()&0o111 != 0
+	return hasExecPermission(info.Mode())
 }
