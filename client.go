@@ -125,6 +125,17 @@ func (c *Client) Query(ctx context.Context, prompt string) error {
 	return sess.sendPrompt(ctx, prompt)
 }
 
+// QuerySession sends a prompt addressed to a specific session id, for routing
+// within a multi-session connection (mirrors the session_id argument of the
+// official client.query). An empty sessionID behaves like [Client.Query].
+func (c *Client) QuerySession(ctx context.Context, prompt, sessionID string) error {
+	sess, err := c.session()
+	if err != nil {
+		return err
+	}
+	return sess.sendPromptSession(ctx, prompt, sessionID)
+}
+
 // Receive returns the channel of streamed results. The channel is closed when
 // the session ends.
 func (c *Client) Receive() <-chan Result {
@@ -150,6 +161,27 @@ func (c *Client) Messages(ctx context.Context) iter.Seq2[Message, error] {
 				if !yield(res.Message, res.Err) {
 					return
 				}
+			}
+		}
+	}
+}
+
+// ReceiveResponse is like [Client.Messages] but terminates after the next
+// [ResultMessage] (which is itself yielded) — convenient for consuming a single
+// turn's response. If no result arrives, it iterates until ctx is canceled or
+// the session ends.
+func (c *Client) ReceiveResponse(ctx context.Context) iter.Seq2[Message, error] {
+	inner := c.Messages(ctx)
+	return func(yield func(Message, error) bool) {
+		for msg, err := range inner {
+			if !yield(msg, err) {
+				return
+			}
+			if err != nil {
+				return
+			}
+			if _, ok := msg.(*ResultMessage); ok {
+				return
 			}
 		}
 	}

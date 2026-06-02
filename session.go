@@ -115,7 +115,16 @@ type userInputMessage struct {
 
 // sendPrompt writes a user prompt to the CLI over stdin.
 func (s *session) sendPrompt(ctx context.Context, prompt string) error {
-	sid := s.sessionID
+	return s.sendPromptSession(ctx, prompt, "")
+}
+
+// sendPromptSession writes a prompt with an explicit session id. An empty
+// sessionID falls back to the captured session id, then "default".
+func (s *session) sendPromptSession(ctx context.Context, prompt, sessionID string) error {
+	sid := sessionID
+	if sid == "" {
+		sid = s.sessionID
+	}
 	if sid == "" {
 		sid = "default"
 	}

@@ -177,3 +177,44 @@ func assertControlSent(t *testing.T, lines [][]byte, subtype string, fields map[
 	}
 	t.Errorf("no control_request with subtype %q was sent", subtype)
 }
+
+func TestReceiveResponseStopsAtResult(t *testing.T) {
+	tr := newInteractiveTransport()
+	tr.onUser = func(turn int, prompt string) [][]byte {
+		return [][]byte{
+			[]byte(`{"type":"assistant","message":{"model":"m","content":[{"type":"text","text":"hi"}]}}`),
+			[]byte(`{"type":"result","subtype":"success","is_error":false,"result":"done"}`),
+			// A second turn's message that must NOT be yielded by ReceiveResponse.
+			[]byte(`{"type":"assistant","message":{"model":"m","content":[{"type":"text","text":"extra"}]}}`),
+		}
+	}
+	defer installInteractive(tr)()
+
+	ctx := context.Background()
+	client := NewClient()
+	if err := client.Connect(ctx); err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	if err := client.Query(ctx, "hi"); err != nil {
+		t.Fatalf("query: %v", err)
+	}
+
+	var types []string
+	for msg, err := range client.ReceiveResponse(ctx) {
+		if err != nil {
+			t.Fatalf("stream: %v", err)
+		}
+		switch msg.(type) {
+		case *AssistantMessage:
+			types = append(types, "assistant")
+		case *ResultMessage:
+			types = append(types, "result")
+		}
+	}
+	// Must be exactly assistant then result, stopping at the result.
+	if len(types) != 2 || types[0] != "assistant" || types[1] != "result" {
+		t.Errorf("ReceiveResponse yielded %v, want [assistant result]", types)
+	}
+}

@@ -27,6 +27,9 @@ All notable changes to this project are documented here. The format is based on
   `WithIncludeHookEvents`), `WithSystemPromptFile` (`--system-prompt-file`), and
   `WithMCPConfig` (the string/path form of `mcp_servers`). These were gaps found
   in a deeper functional sweep against the source.
+- `Client.ReceiveResponse` (mirrors `receive_response`: yields until and
+  including the next `ResultMessage`, then stops) and `Client.QuerySession`
+  (mirrors `query`'s `session_id` argument for multi-session routing).
 - **`--thinking` flag emission.** The SDK emitted a bare `--thinking` (rejected
   by the CLI). Replaced `WithThinking(maxTokens, effort)` with the typed
   `WithThinkingConfig` (adaptive → `--thinking adaptive`, enabled →
