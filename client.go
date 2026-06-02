@@ -2,6 +2,7 @@ package claude
 
 import (
 	"context"
+	"errors"
 	"io"
 	"iter"
 	"sync"
@@ -87,7 +88,7 @@ func (c *Client) readLoop() {
 				return
 			}
 			msg, err := decodeMessageLine(line)
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				return
 			}
 			if err != nil {
@@ -158,11 +159,11 @@ func (c *Client) Messages(ctx context.Context) iter.Seq2[Message, error] {
 // returns any process error from the CLI.
 func (c *Client) Close() error {
 	c.closeOnce.Do(func() {
+		// Snapshot and mark closed in a single critical section so a concurrent
+		// session() cannot observe sess set while closed is still false.
 		c.mu.Lock()
 		sess := c.sess
 		done := c.done
-		c.mu.Unlock()
-		c.mu.Lock()
 		c.closed = true
 		c.mu.Unlock()
 		if sess == nil {

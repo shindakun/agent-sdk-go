@@ -124,6 +124,23 @@ func schemaFor(t reflect.Type) json.RawMessage {
 		return json.RawMessage(`{"type":"object"}`)
 	}
 
+	schema := structSchema(t, map[reflect.Type]bool{})
+	b, err := json.Marshal(schema)
+	if err != nil {
+		return json.RawMessage(`{"type":"object"}`)
+	}
+	return b
+}
+
+// structSchema builds a JSON Schema object for a struct type, recursing into
+// nested struct/slice/map fields. seen guards against recursive types.
+func structSchema(t reflect.Type, seen map[reflect.Type]bool) map[string]any {
+	if seen[t] {
+		return map[string]any{"type": "object"}
+	}
+	seen[t] = true
+	defer delete(seen, t)
+
 	props := map[string]any{}
 	var required []string
 	for i := 0; i < t.NumField(); i++ {
@@ -138,7 +155,7 @@ func schemaFor(t reflect.Type) json.RawMessage {
 		if name == "" {
 			name = f.Name
 		}
-		props[name] = map[string]any{"type": jsonSchemaType(f.Type)}
+		props[name] = fieldSchema(f.Type, seen)
 		if !strings.Contains(opts, "omitempty") {
 			required = append(required, name)
 		}
@@ -148,30 +165,32 @@ func schemaFor(t reflect.Type) json.RawMessage {
 	if len(required) > 0 {
 		schema["required"] = required
 	}
-	b, err := json.Marshal(schema)
-	if err != nil {
-		return json.RawMessage(`{"type":"object"}`)
-	}
-	return b
+	return schema
 }
 
-func jsonSchemaType(t reflect.Type) string {
+// fieldSchema returns the JSON Schema for a single field type, recursing into
+// nested structs, slice element types, and map value types.
+func fieldSchema(t reflect.Type, seen map[reflect.Type]bool) map[string]any {
 	for t.Kind() == reflect.Ptr {
 		t = t.Elem()
 	}
 	switch t.Kind() {
 	case reflect.Bool:
-		return "boolean"
+		return map[string]any{"type": "boolean"}
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return "integer"
+		return map[string]any{"type": "integer"}
 	case reflect.Float32, reflect.Float64:
-		return "number"
+		return map[string]any{"type": "number"}
+	case reflect.String:
+		return map[string]any{"type": "string"}
 	case reflect.Slice, reflect.Array:
-		return "array"
-	case reflect.Map, reflect.Struct:
-		return "object"
+		return map[string]any{"type": "array", "items": fieldSchema(t.Elem(), seen)}
+	case reflect.Map:
+		return map[string]any{"type": "object", "additionalProperties": fieldSchema(t.Elem(), seen)}
+	case reflect.Struct:
+		return structSchema(t, seen)
 	default:
-		return "string"
+		return map[string]any{"type": "string"}
 	}
 }

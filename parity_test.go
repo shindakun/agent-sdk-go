@@ -285,3 +285,19 @@ func TestCanUseToolContextFullFields(t *testing.T) {
 		t.Errorf("permission context missing fields: %+v", got)
 	}
 }
+
+func TestSystemInitPluginsDecode(t *testing.T) {
+	line := []byte(`{"type":"system","subtype":"init","session_id":"s","tools":["Read"],"plugins":[{"name":"demo-plugin","path":"/p/demo-plugin","source":"demo-plugin@inline"}]}`)
+	msg, err := UnmarshalMessage(line)
+	if err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	sm := msg.(*SystemMessage)
+	if len(sm.Plugins) != 1 {
+		t.Fatalf("plugins = %d, want 1", len(sm.Plugins))
+	}
+	p := sm.Plugins[0]
+	if p.Name != "demo-plugin" || p.Path != "/p/demo-plugin" || p.Source != "demo-plugin@inline" {
+		t.Errorf("plugin = %+v", p)
+	}
+}

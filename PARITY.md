@@ -115,10 +115,34 @@ same path-sanitization (non-alphanumeric → `-`, djb2/base-36 hash suffix past
 
 ## Examples
 
-8 example programs (Python ships ~16, several being async-runtime variants —
-trio, IPython — that have no Go analogue): `query`, `interactive`, `customtool`,
-`hooks`, `permission`, `options` (system prompt + setting sources + budget +
-partial messages + stderr), `sessions`.
+16 example programs mapped 1:1 to the upstream Python examples, plus a few
+Go-idiomatic extras. See [examples/README.md](examples/README.md) for the full
+table. The only upstream examples not ported are the async-runtime variants
+(`streaming_mode_trio`, `streaming_mode_ipython`) — no Go analogue.
+
+## End-to-end coverage
+
+Two test tiers run against the real `claude` binary:
+
+- **`integration`** (smoke, cheap) — `go test -tags integration`: one-shot query,
+  multi-turn client, custom tool, CanUseTool, hook, resume, interrupt, thinking.
+- **`e2e`** (full, faithful) — `go test -tags e2e`, mirroring upstream's
+  `e2e-tests/`:
+
+| Upstream e2e file | Go `e2e` test(s) |
+| --- | --- |
+| `test_structured_output.py` | `TestE2EStructuredOutputSimple`, `…Enum` |
+| `test_dynamic_control.py` | `TestE2ESetModel`, `TestE2ESetPermissionMode` (+ interrupt in integration) |
+| `test_hooks.py` / `test_hook_events.py` | `TestE2EHookFires`, `…PermissionDecisionDeny`, `…MultipleHooks` |
+| `test_agents_and_settings.py` | `TestE2EAgentDefinition`, `TestE2ESettingSources` |
+| `test_sdk_mcp_tools.py` | `TestE2ESdkMcpMultipleTools`, `…PermissionEnforcement` |
+| `test_include_partial_messages.py` | `TestE2EPartialMessagesPresentAndAbsent` |
+| `test_stderr_callback.py` | `TestE2EStderrCallback` |
+| (plugins) | `TestE2EPluginLoaded` |
+
+Plugin note: a plugin's commands are **auto-discovered** from its `commands/`
+directory — `plugin.json` does not list them. The loaded plugin appears in the
+init `SystemMessage.Plugins` list.
 
 ## Not applicable
 

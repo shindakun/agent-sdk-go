@@ -30,8 +30,14 @@ All notable changes to this project are documented here. The format is based on
 - `CLAUDE.md`, this changelog, and 9 new examples (16 total) mapped 1:1 to the
   upstream Python examples plus Go-idiomatic extras (collect, interrupt,
   thinking). See `examples/README.md`.
-- An integration test suite (`go test -tags integration`) exercising the real
-  `claude` binary.
+- A two-tier test suite against the real `claude` binary: `integration` (smoke)
+  and `e2e` (full, mirroring upstream's `e2e-tests/` — structured output, dynamic
+  control, hook variants, setting sources, SDK MCP permission enforcement,
+  partial messages, agents, plugins). Run with `go test -tags e2e`.
+- `scripts/run-examples.sh` runs every example against the live binary.
+- `SystemMessage.Plugins` (`[]PluginInfo`) populated from the init message,
+  matching upstream's `data["plugins"]`. The `plugins` example now inspects this
+  typed field instead of asking the model.
 
 ## Earlier (M1–M8)
 

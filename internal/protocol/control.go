@@ -49,6 +49,9 @@ type Engine struct {
 
 	startOnce sync.Once
 	closed    atomic.Bool
+	// handlers tracks in-flight inbound-request goroutines so Close can wait
+	// for them rather than leaking or racing the transport.
+	handlers sync.WaitGroup
 }
 
 // SetMirrorSink registers a callback to receive transcript_mirror frames. It
@@ -158,12 +161,20 @@ func (e *Engine) handleInboundRequest(line []byte) {
 	var sub controlSubtype
 	_ = json.Unmarshal(env.Request, &sub)
 
+	// Drop new inbound requests once closed so we don't spawn goroutines that
+	// race a closing transport.
+	if e.closed.Load() {
+		return
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	e.cancelMu.Lock()
 	e.cancels[env.RequestID] = cancel
 	e.cancelMu.Unlock()
 
+	e.handlers.Add(1)
 	go func() {
+		defer e.handlers.Done()
 		defer func() {
 			e.cancelMu.Lock()
 			delete(e.cancels, env.RequestID)
@@ -202,6 +213,10 @@ func (e *Engine) respondInbound(requestID string, payload json.RawMessage, err e
 	}
 	b, mErr := json.Marshal(out)
 	if mErr != nil {
+		return
+	}
+	// Skip the write if we're shutting down; the transport may be closing.
+	if e.closed.Load() {
 		return
 	}
 	_ = e.t.Write(context.Background(), b)
@@ -283,4 +298,7 @@ func (e *Engine) Close() {
 		cancel()
 	}
 	e.cancelMu.Unlock()
+	// Wait for in-flight inbound-request handlers to finish so they don't race
+	// the transport shutdown.
+	e.handlers.Wait()
 }

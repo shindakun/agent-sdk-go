@@ -42,6 +42,14 @@ type UserMessage struct {
 
 func (*UserMessage) isMessage() {}
 
+// PluginInfo describes a plugin loaded into the session, as reported in the
+// "init" system message.
+type PluginInfo struct {
+	Name   string `json:"name"`
+	Path   string `json:"path"`
+	Source string `json:"source,omitempty"`
+}
+
 // SystemMessage carries out-of-band events from the CLI. Subtype distinguishes
 // the payload (for example "init" or "session_state_changed"); subtype-specific
 // fields are populated where known, and Data holds the full payload.
@@ -50,6 +58,8 @@ type SystemMessage struct {
 	SessionID string
 	// Tools is populated for the "init" subtype.
 	Tools []string
+	// Plugins is populated for the "init" subtype with the loaded plugins.
+	Plugins []PluginInfo
 	// Data is the full system payload for subtype-specific access.
 	Data json.RawMessage
 	Raw  json.RawMessage

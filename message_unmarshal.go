@@ -2,6 +2,7 @@ package claude
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 )
 
@@ -64,8 +65,8 @@ func (e *notAMessageError) Error() string {
 // IsNotAMessage reports whether err indicates a non-message stream frame (a
 // control-protocol envelope or sentinel) rather than a decode failure.
 func IsNotAMessage(err error) bool {
-	_, ok := err.(*notAMessageError)
-	return ok
+	var nae *notAMessageError
+	return errors.As(err, &nae)
 }
 
 func decodeAssistant(b []byte) (Message, error) {
@@ -135,6 +136,7 @@ func decodeSystem(b []byte) (Message, error) {
 		Subtype   string          `json:"subtype"`
 		SessionID string          `json:"session_id"`
 		Tools     []string        `json:"tools"`
+		Plugins   []PluginInfo    `json:"plugins"`
 		Data      json.RawMessage `json:"data"`
 	}
 	if err := json.Unmarshal(b, &env); err != nil {
@@ -174,6 +176,7 @@ func decodeSystem(b []byte) (Message, error) {
 		Subtype:   env.Subtype,
 		SessionID: env.SessionID,
 		Tools:     env.Tools,
+		Plugins:   env.Plugins,
 		Data:      data,
 		Raw:       clone(b),
 	}, nil

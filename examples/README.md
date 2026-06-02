@@ -9,6 +9,11 @@ go run ./examples/query
 All require a working `claude` binary on `PATH` and Claude Code auth (see the
 top-level [README](../README.md)).
 
+`scripts/run-examples.sh` runs every example against the live binary and reports
+pass/fail. The one-shot examples exit on their own; `interactive` reads stdin and
+`interrupt` runs a few seconds then self-stops, so the script feeds the former a
+scripted prompt and treats a clean timeout on the latter as success.
+
 ## Mapping to the upstream Python SDK
 
 These mirror the examples in

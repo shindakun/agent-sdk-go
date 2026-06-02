@@ -5,18 +5,25 @@
 /bin/
 
 # Compiled example binaries accidentally built in-tree (named after the example
-# package dir, e.g. `go build ./examples/customtool/` -> ./customtool)
+# package dir, e.g. `go build ./examples/agents/` -> ./agents). Ignore any
+# root-level executable matching an examples/ subdir name.
+/agents
+/collect
 /customtool
-/query
-/interactive
-/options
+/filesystem
 /hooks
+/interactive
+/interrupt
+/options
+/partial_messages
 /permission
+/plugins
+/query
 /sessions
+/stderr
+/thinking
+/tools_option
 
 # Editor / OS
 .DS_Store
 *.swp
-
-# Local clone of the upstream Python SDK, kept for parity audits (not committed)
-/.parity-ref/

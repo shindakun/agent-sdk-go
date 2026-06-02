@@ -50,10 +50,17 @@ loop, built-in tools, and context management.
 
 # Parity
 
-This is a faithful port of `anthropics/claude-agent-sdk-python`. A read-only
-clone of the upstream source is kept at `.parity-ref/claude-agent-sdk-python`
-(gitignored, pinned to the bundled CLI version). Before changing protocol or
-option behavior, diff against it — names, struct fields, enum values, and CLI
-flags. See [PARITY.md](PARITY.md). The installed `claude` should match the
-version the upstream SDK bundles (`_cli_version.py`); verify behavior with the
-integration tests, not just unit tests — static parity is not behavioral parity.
+This is a faithful port of `anthropics/claude-agent-sdk-python`. For parity
+audits, clone the upstream source **outside the module tree** (e.g.
+`/tmp/agent-sdk-go-parity-ref/`) so the Go toolchain never descends into it, and
+pin it to the CLI version the installed `claude` reports (`_cli_version.py`):
+
+```bash
+git clone --depth 1 https://github.com/anthropics/claude-agent-sdk-python \
+  /tmp/agent-sdk-go-parity-ref/claude-agent-sdk-python
+```
+
+Before changing protocol or option behavior, diff against it — names, struct
+fields, enum values, and CLI flags. See [PARITY.md](PARITY.md). Verify behavior
+with the integration/e2e tests, not just unit tests — static parity is not
+behavioral parity.

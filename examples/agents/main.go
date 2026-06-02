@@ -13,14 +13,15 @@ import (
 func main() {
 	ctx := context.Background()
 
+	// A small, deterministic delegation so the example finishes quickly. (A
+	// real code-review agent would be given Read/Glob/Grep and a codebase.)
 	for msg, err := range claude.Query(ctx,
-		"Use the code-reviewer agent to review the code in this directory.",
-		claude.WithAllowedTools("Read", "Glob", "Grep", "Agent"),
+		"Use the haiku-writer agent to write a two-line haiku about Go. Reply with only the haiku.",
+		claude.WithAllowedTools("Agent"),
 		claude.WithAgents(map[string]claude.AgentDefinition{
-			"code-reviewer": {
-				Description: "Expert code reviewer for quality and security reviews.",
-				Prompt:      "Analyze code quality and suggest concrete improvements.",
-				Tools:       []string{"Read", "Glob", "Grep"},
+			"haiku-writer": {
+				Description: "Writes short haiku on a given topic.",
+				Prompt:      "You write a concise haiku about the topic the user names. Output only the haiku.",
 			},
 		}),
 	) {

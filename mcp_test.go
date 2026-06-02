@@ -210,3 +210,39 @@ func TestMcpInitialize(t *testing.T) {
 		t.Errorf("serverInfo = %+v", out.Result.ServerInfo)
 	}
 }
+
+func TestNewToolSchemaNested(t *testing.T) {
+	type inner struct {
+		X int      `json:"x"`
+		Y []string `json:"y"`
+	}
+	type outer struct {
+		Name  string `json:"name"`
+		Inner inner  `json:"inner"`
+	}
+	tool := NewTool("t", "d", func(ctx context.Context, in outer) (ToolResult, error) {
+		return TextResult(""), nil
+	})
+	var schema struct {
+		Properties map[string]json.RawMessage `json:"properties"`
+	}
+	if err := json.Unmarshal(tool.InputSchema, &schema); err != nil {
+		t.Fatalf("schema: %v (%s)", err, tool.InputSchema)
+	}
+	var innerSchema struct {
+		Type       string                     `json:"type"`
+		Properties map[string]json.RawMessage `json:"properties"`
+	}
+	if err := json.Unmarshal(schema.Properties["inner"], &innerSchema); err != nil {
+		t.Fatalf("inner schema: %v", err)
+	}
+	if innerSchema.Type != "object" {
+		t.Errorf("inner type = %q, want object", innerSchema.Type)
+	}
+	if _, ok := innerSchema.Properties["x"]; !ok {
+		t.Errorf("nested struct not recursed: %s", schema.Properties["inner"])
+	}
+	if _, ok := innerSchema.Properties["y"]; !ok {
+		t.Errorf("nested slice field missing: %s", schema.Properties["inner"])
+	}
+}
