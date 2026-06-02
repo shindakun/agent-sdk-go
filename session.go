@@ -80,7 +80,7 @@ func (s *session) connect(ctx context.Context) error {
 		s.mirror = newMirrorBatcher(
 			s.opts.sessionStore,
 			s.opts.sessionStoreFlush,
-			func() (string, error) { return projectsDirFor(s.opts.cwd) },
+			func() (string, error) { return projectsDirFor() },
 			func(m Message) { s.injectCh <- m },
 		)
 		s.engine.SetMirrorSink(s.mirror.enqueue)

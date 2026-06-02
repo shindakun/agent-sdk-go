@@ -274,7 +274,7 @@ func TestCanUseToolContextFullFields(t *testing.T) {
 	if err := client.Connect(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 	tr.sendInbound(t, "rin_1", "can_use_tool", map[string]any{
 		"tool_name": "Bash", "input": json.RawMessage(`{}`), "tool_use_id": "tu",
 		"agent_id": "ag", "blocked_path": "/etc", "decision_reason": "policy",

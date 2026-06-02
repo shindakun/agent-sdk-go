@@ -41,11 +41,14 @@ All notable changes to this project are documented here. The format is based on
 - `SupportedCLIVersion` constant (mirrors upstream's `_cli_version.py`, pinned to
   `2.1.159`) plus `CLIVersion()` / `CheckCLIVersion()` to report the installed
   binary's version and flag a mismatch.
-- GitHub Actions CI: `Lint` (gofmt/vet/build) and `Test` (`go test -race` across
-  Linux/macOS/Windows) on every PR/push; a manual-only `E2E` workflow that
-  installs `claude` and runs the e2e tests + examples (the Go analogues of
-  upstream's `lint.yml` / `test.yml`; Python packaging workflows have no Go
-  equivalent).
+- GitHub Actions CI: `Lint` (gofmt/vet/build + golangci-lint) and `Test`
+  (`go test -race` across Linux/macOS/Windows) on every PR/push; a manual-only
+  `E2E` workflow that installs `claude` and runs the e2e tests + examples (the Go
+  analogues of upstream's `lint.yml` / `test.yml`; Python packaging workflows
+  have no Go equivalent).
+- `.golangci.yml` (golangci-lint v2) — standard linters plus bodyclose, misspell,
+  unconvert, and revive (with the noisiest revive rules disabled); lints the
+  integration/e2e-tagged files too. The tree is golangci-lint-clean.
 
 ## Earlier (M1–M8)
 

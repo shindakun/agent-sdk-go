@@ -117,7 +117,7 @@ func ErrorResult(text string) ToolResult {
 // schemaFor produces a minimal JSON Schema object for a struct type. Non-struct
 // types yield a permissive empty-object schema.
 func schemaFor(t reflect.Type) json.RawMessage {
-	for t != nil && t.Kind() == reflect.Ptr {
+	for t != nil && t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 	if t == nil || t.Kind() != reflect.Struct {
@@ -171,7 +171,7 @@ func structSchema(t reflect.Type, seen map[reflect.Type]bool) map[string]any {
 // fieldSchema returns the JSON Schema for a single field type, recursing into
 // nested structs, slice element types, and map value types.
 func fieldSchema(t reflect.Type, seen map[reflect.Type]bool) map[string]any {
-	for t.Kind() == reflect.Ptr {
+	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 	switch t.Kind() {

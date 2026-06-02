@@ -37,6 +37,20 @@ func runToResult(t *testing.T, prompt string, opts ...Option) *ResultMessage {
 	t.Helper()
 	ctx, cancel := e2eCtx(t)
 	defer cancel()
+	return runToResultCtx(t, ctx, prompt, opts...)
+}
+
+// runToResultTimeout is like runToResult with an explicit deadline, for slow
+// paths such as subagent delegation.
+func runToResultTimeout(t *testing.T, d time.Duration, prompt string, opts ...Option) *ResultMessage {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), d)
+	defer cancel()
+	return runToResultCtx(t, ctx, prompt, opts...)
+}
+
+func runToResultCtx(t *testing.T, ctx context.Context, prompt string, opts ...Option) *ResultMessage {
+	t.Helper()
 	var result *ResultMessage
 	for msg, err := range Query(ctx, prompt, opts...) {
 		if err != nil {
@@ -107,7 +121,7 @@ func TestE2ESetModel(t *testing.T) {
 	if err := client.Connect(ctx); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 	if err := client.SetModel(ctx, "claude-sonnet-4-6"); err != nil {
 		t.Fatalf("set model: %v", err)
 	}
@@ -121,7 +135,7 @@ func TestE2ESetPermissionMode(t *testing.T) {
 	if err := client.Connect(ctx); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 	if err := client.SetPermissionMode(ctx, PermissionAcceptEdits); err != nil {
 		t.Fatalf("set permission mode: %v", err)
 	}
@@ -333,7 +347,9 @@ func TestE2EPartialMessagesPresentAndAbsent(t *testing.T) {
 
 func TestE2EAgentDefinition(t *testing.T) {
 	e2eSkip(t)
-	r := runToResult(t,
+	// Subagent delegation is the slowest path; give it extra headroom so it
+	// doesn't flake under load when the whole suite runs sequentially.
+	r := runToResultTimeout(t, 240*time.Second,
 		"Use the echo-agent to repeat the word 'parity'. Reply with only that word.",
 		WithAllowedTools("Agent"),
 		WithAgents(map[string]AgentDefinition{

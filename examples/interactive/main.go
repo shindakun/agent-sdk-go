@@ -20,7 +20,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "connect:", err)
 		os.Exit(1)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	// Consume the stream in the background, printing assistant text and noting
 	// when each turn completes.

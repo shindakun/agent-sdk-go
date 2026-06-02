@@ -27,7 +27,7 @@ func TestClientMultiTurn(t *testing.T) {
 	if err := client.Connect(ctx); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	recv := client.Receive()
 
@@ -91,7 +91,7 @@ func TestClientControlRequests(t *testing.T) {
 	if err := client.Connect(ctx); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	if err := client.SetModel(ctx, "opus"); err != nil {
 		t.Errorf("set model: %v", err)

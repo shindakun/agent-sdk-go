@@ -189,8 +189,8 @@ func WithResume(sessionID string) Option {
 	return func(o *Options) { o.resume = sessionID }
 }
 
-// WithForkSession, combined with WithResume, forks the resumed session rather
-// than continuing it in place.
+// WithForkSession forks the resumed session (when combined with WithResume)
+// rather than continuing it in place.
 func WithForkSession() Option {
 	return func(o *Options) { o.forkSession = true }
 }

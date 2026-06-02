@@ -28,7 +28,9 @@ func Query(ctx context.Context, prompt string, opts ...Option) iter.Seq2[Message
 			yield(nil, err)
 			return
 		}
-		defer client.Close()
+		// Close on iterator exit; its error (a non-zero CLI exit) is best-effort
+		// here — message-level errors already surfaced through yield above.
+		defer func() { _ = client.Close() }()
 
 		if err := client.Query(ctx, prompt); err != nil {
 			yield(nil, err)

@@ -1,0 +1,36 @@
+version: "2"
+
+run:
+  # Lint code behind the integration and e2e build tags too, so the test suites
+  # are checked.
+  build-tags:
+    - integration
+    - e2e
+
+linters:
+  # Start from the default set (errcheck, govet, ineffassign, staticcheck,
+  # unused) and add a few high-value extras.
+  default: standard
+  enable:
+    - bodyclose
+    - misspell
+    - unconvert
+    - revive
+  settings:
+    revive:
+      rules:
+        # Silence the noisy rules: a doc comment on every exported enum
+        # constant, a package-comment requirement, and unused-parameter (too
+        # aggressive for ctx on interface-conformance methods). Keep var-naming
+        # and the rest of the high-signal defaults.
+        - name: exported
+          disabled: true
+        - name: package-comments
+          disabled: true
+        - name: unused-parameter
+          disabled: true
+        - name: var-naming
+
+formatters:
+  enable:
+    - gofmt

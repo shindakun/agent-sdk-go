@@ -18,7 +18,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "tempdir:", err)
 		os.Exit(1)
 	}
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	for msg, err := range claude.Query(ctx,
 		"Create a file named notes.txt containing three TODO items, then read it back to confirm.",

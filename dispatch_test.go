@@ -24,7 +24,7 @@ func TestCanUseToolAllowWithUpdatedInput(t *testing.T) {
 	if err := client.Connect(ctx); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	resp, errStr := tr.sendInbound(t, "req_in_1", "can_use_tool", map[string]any{
 		"tool_name":   "Bash",
@@ -59,7 +59,7 @@ func TestCanUseToolDeny(t *testing.T) {
 	if err := client.Connect(ctx); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	resp, errStr := tr.sendInbound(t, "req_in_2", "can_use_tool", map[string]any{
 		"tool_name": "Write",
@@ -101,7 +101,7 @@ func TestHookCallbackDispatchAndConfig(t *testing.T) {
 	if err := client.Connect(ctx); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	// The initialize request must advertise the hook under hookCallbackIds.
 	assertHooksConfigSent(t, tr.writtenLines())
@@ -145,7 +145,7 @@ func TestUnsupportedControlRequestErrors(t *testing.T) {
 	if err := client.Connect(ctx); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	_, errStr := tr.sendInbound(t, "req_in_4", "totally_unknown", nil)
 	if errStr == "" {
@@ -172,14 +172,14 @@ func assertHooksConfigSent(t *testing.T, lines [][]byte) {
 		}
 		var entry struct {
 			Matcher         string   `json:"matcher"`
-			HookCallbackIds []string `json:"hookCallbackIds"`
+			HookCallbackIDs []string `json:"hookCallbackIds"`
 		}
 		_ = json.Unmarshal(entries[0], &entry)
 		if entry.Matcher != "Bash" {
 			t.Errorf("matcher = %q", entry.Matcher)
 		}
-		if len(entry.HookCallbackIds) != 1 || entry.HookCallbackIds[0] != "hook_0" {
-			t.Errorf("hookCallbackIds = %v", entry.HookCallbackIds)
+		if len(entry.HookCallbackIDs) != 1 || entry.HookCallbackIDs[0] != "hook_0" {
+			t.Errorf("hookCallbackIds = %v", entry.HookCallbackIDs)
 		}
 		return
 	}

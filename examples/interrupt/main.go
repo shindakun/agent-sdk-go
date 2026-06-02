@@ -22,7 +22,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "connect:", err)
 		os.Exit(1)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	if err := client.Query(ctx,
 		"Count from 1 to 20, running `sleep 1` between each number using Bash."); err != nil {

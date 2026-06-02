@@ -77,9 +77,8 @@ func SessionsDir(directory string) (string, error) {
 }
 
 // projectsDirFor returns the ~/.claude/projects directory (the parent of all
-// per-project session dirs). The directory argument is accepted for symmetry
-// with SessionsDir but does not affect the result.
-func projectsDirFor(directory string) (string, error) {
+// per-project session dirs).
+func projectsDirFor() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
@@ -219,7 +218,7 @@ func ImportSessionToStore(ctx context.Context, sessionID string, store SessionSt
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	key := SessionKey{ProjectKey: projectKey, SessionID: sessionID}
 	batch := make([]SessionStoreEntry, 0, cfg.batchSize)
@@ -264,7 +263,7 @@ func ListSubagents(sessionID, directory string) ([]string, error) {
 		}
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	seen := map[string]bool{}
 	var ids []string
@@ -298,7 +297,7 @@ func GetSubagentMessages(sessionID, agentID, directory string, limit, offset int
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	var msgs []SessionMessage
 	sc := bufio.NewScanner(f)
@@ -351,7 +350,7 @@ func readSessionInfo(path string) (SDKSessionInfo, error) {
 	if err != nil {
 		return SDKSessionInfo{}, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	st, err := f.Stat()
 	if err != nil {
@@ -412,7 +411,7 @@ func readSessionMessages(path string, limit, offset int) ([]SessionMessage, erro
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	var msgs []SessionMessage
 	sc := bufio.NewScanner(f)

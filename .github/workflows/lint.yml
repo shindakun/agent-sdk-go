@@ -32,3 +32,10 @@ jobs:
 
       - name: go build (incl. examples)
         run: go build ./...
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.1.6
+          # The repo .golangci.yml (version "2") sets build-tags so the
+          # integration/e2e files are linted too.

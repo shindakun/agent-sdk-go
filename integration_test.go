@@ -87,7 +87,7 @@ func TestIntegrationClientMultiTurn(t *testing.T) {
 	if err := client.Connect(ctx); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	// Server info should have been captured during connect.
 	info, err := client.GetServerInfo(ctx)
@@ -318,7 +318,7 @@ func TestIntegrationInterrupt(t *testing.T) {
 	if err := client.Connect(ctx); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	if err := client.Query(ctx, "Count slowly from 1 to 30, sleeping 1 second between each using Bash `sleep 1`."); err != nil {
 		t.Fatalf("query: %v", err)

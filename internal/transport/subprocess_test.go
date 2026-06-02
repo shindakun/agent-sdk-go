@@ -40,11 +40,11 @@ func runFakeCLI() {
 
 			switch {
 			case probe.Type == "control_request" && probe.Request.Subtype == "initialize":
-				fmt.Fprintf(out, `{"type":"control_response","response":{"subtype":"success","request_id":%q,"response":{}}}`+"\n", probe.RequestID)
+				_, _ = fmt.Fprintf(out, `{"type":"control_response","response":{"subtype":"success","request_id":%q,"response":{}}}`+"\n", probe.RequestID)
 			case probe.Type == "user":
-				fmt.Fprintln(out, `{"type":"system","subtype":"init","session_id":"s1","tools":["Read"]}`)
-				fmt.Fprintln(out, `{"type":"assistant","message":{"model":"m","content":[{"type":"text","text":"hi"}]}}`)
-				fmt.Fprintln(out, `{"type":"result","subtype":"success","is_error":false,"result":"hi"}`)
+				_, _ = fmt.Fprintln(out, `{"type":"system","subtype":"init","session_id":"s1","tools":["Read"]}`)
+				_, _ = fmt.Fprintln(out, `{"type":"assistant","message":{"model":"m","content":[{"type":"text","text":"hi"}]}}`)
+				_, _ = fmt.Fprintln(out, `{"type":"result","subtype":"success","is_error":false,"result":"hi"}`)
 				os.Exit(0)
 			}
 		}

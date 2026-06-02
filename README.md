@@ -188,6 +188,7 @@ Python examples (plus a few Go-idiomatic extras). Each maps to its counterpart i
 go build ./...          # library + examples
 go vet ./...
 gofmt -l .
+golangci-lint run       # see .golangci.yml (lints integration/e2e files too)
 go test -race ./...                       # unit tests
 go test -tags integration -timeout 600s   # smoke tier against a real claude binary
 go test -tags e2e -timeout 1200s          # full e2e tier (paid API calls)

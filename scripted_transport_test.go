@@ -69,7 +69,7 @@ func (s *scriptedTransport) Write(ctx context.Context, obj []byte) error {
 	}
 	_ = json.Unmarshal(probe.Request, &sub)
 
-	var payload json.RawMessage = json.RawMessage(`{}`)
+	payload := json.RawMessage(`{}`)
 	if s.controlResponder != nil {
 		if p := s.controlResponder(sub.Subtype, probe.Request); p != nil {
 			payload = p
@@ -184,7 +184,7 @@ func (s *interactiveTransport) Write(ctx context.Context, obj []byte) error {
 			Subtype string `json:"subtype"`
 		}
 		_ = json.Unmarshal(probe.Request, &sub)
-		var payload json.RawMessage = json.RawMessage(`{}`)
+		payload := json.RawMessage(`{}`)
 		if s.controlResponder != nil {
 			if p := s.controlResponder(sub.Subtype, probe.Request); p != nil {
 				payload = p

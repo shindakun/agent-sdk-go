@@ -14,7 +14,7 @@ import (
 type prefixWriter struct{ w *os.File }
 
 func (p prefixWriter) Write(b []byte) (int, error) {
-	fmt.Fprintf(p.w, "[claude stderr] %s", b)
+	_, _ = fmt.Fprintf(p.w, "[claude stderr] %s", b)
 	return len(b), nil
 }
 

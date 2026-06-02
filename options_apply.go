@@ -24,6 +24,8 @@ func (o *Options) buildArgs() ([]string, error) {
 	}
 
 	switch o.systemPrompt.mode {
+	case systemPromptUnset:
+		// No system-prompt flag.
 	case systemPromptReplace:
 		args = append(args, "--system-prompt", o.systemPrompt.text)
 	case systemPromptAppend:
