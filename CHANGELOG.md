@@ -5,11 +5,21 @@ All notable changes to this project are documented here. The format is based on
 
 ## Unreleased
 
+### Re-synced to Claude Code CLI 2.1.160
+
+- Bumped `SupportedCLIVersion` to `2.1.160`. Upstream commit `6d93523` was a
+  pure `_cli_version.py` bump (no SDK source change — verified via the
+  per-commit diff), so no port work was needed. Re-ran the name diff (0 missing,
+  119/123 covered) and the integration + e2e tiers against 2.1.160; all green.
+  `CheckCLIVersion` confirms installed == pinned. This was the first bump
+  surfaced by the upstream-watch workflow, which correctly classified it as a
+  CLI bump.
+
 ### Verified against Claude Code CLI 2.1.159
 
 - Re-synced to the upstream `claude-agent-sdk-python` at the bundled CLI version
-  2.1.159; re-ran the mechanical name/field/value diffs (still 123/123 names,
-  45/45 options) and the live integration suite.
+  2.1.159; re-ran the mechanical name/field/value diffs and the live integration
+  suite.
 
 ### Fixed
 
