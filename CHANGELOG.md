@@ -38,6 +38,9 @@ All notable changes to this project are documented here. The format is based on
 - `SystemMessage.Plugins` (`[]PluginInfo`) populated from the init message,
   matching upstream's `data["plugins"]`. The `plugins` example now inspects this
   typed field instead of asking the model.
+- `SupportedCLIVersion` constant (mirrors upstream's `_cli_version.py`, pinned to
+  `2.1.159`) plus `CLIVersion()` / `CheckCLIVersion()` to report the installed
+  binary's version and flag a mismatch.
 
 ## Earlier (M1–M8)
 

@@ -64,3 +64,9 @@ Before changing protocol or option behavior, diff against it — names, struct
 fields, enum values, and CLI flags. See [PARITY.md](PARITY.md). Verify behavior
 with the integration/e2e tests, not just unit tests — static parity is not
 behavioral parity.
+
+The known-good CLI version is pinned as `SupportedCLIVersion` in
+[claude.go](claude.go) (currently `2.1.159`, matching upstream's
+`_cli_version.py`). When upstream bumps its bundled CLI, update the clone, this
+const, and re-run the audits. `CLIVersion()` / `CheckCLIVersion()` report the
+installed binary's version at runtime.

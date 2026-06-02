@@ -9,6 +9,13 @@ import (
 const installHint = "install it with `npm install -g @anthropic-ai/claude-code` " +
 	"or set the CLI path explicitly with WithCLIPath"
 
+// Discover locates the `claude` binary the same way Connect does: an explicit
+// path is validated and used as-is; otherwise PATH is searched, then common
+// install locations. It returns a *CLINotFoundError when nothing is found.
+func Discover(explicit string) (string, error) {
+	return discoverCLI(explicit)
+}
+
 // discoverCLI locates the `claude` binary. An explicit path is validated and
 // used as-is; otherwise PATH is searched, then a set of common install
 // locations. It returns a *CLINotFoundError when nothing is found.

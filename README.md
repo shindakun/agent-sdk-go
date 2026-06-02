@@ -15,8 +15,10 @@ control-protocol correlation, and dispatch of in-process callbacks (permissions,
 hooks, and SDK MCP tools).
 
 Verified against **Claude Code CLI 2.1.159** (the version the upstream SDK
-bundles) — statically (123/123 public names, 45/45 options) and behaviorally (an
-integration suite that runs against the real binary).
+bundles, pinned as `claude.SupportedCLIVersion`) — statically (123/123 public
+names, 45/45 options) and behaviorally (an integration suite that runs against
+the real binary). `claude.CheckCLIVersion` reports the installed binary's
+version and whether it matches the pin.
 
 ## Installation
 
