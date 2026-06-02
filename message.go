@@ -161,6 +161,22 @@ type TaskNotificationMessage struct {
 
 func (*TaskNotificationMessage) isMessage() {}
 
+// HookEventMessage is a hook lifecycle event emitted on the stream when
+// [WithIncludeHookEvents] is set. It arrives as a system message with subtype
+// "hook_started" (a hook begins) or "hook_response" (a hook completes).
+// HookEventName identifies the event (PreToolUse, PostToolUse, Stop, …); the
+// full payload is in Data.
+type HookEventMessage struct {
+	Subtype       string // "hook_started" | "hook_response"
+	HookEventName string
+	SessionID     string
+	UUID          string
+	Data          json.RawMessage
+	Raw           json.RawMessage
+}
+
+func (*HookEventMessage) isMessage() {}
+
 // MirrorErrorMessage is emitted when a [SessionStore] append fails during live
 // mirroring. It is non-fatal: the on-disk transcript is already durable.
 type MirrorErrorMessage struct {

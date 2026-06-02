@@ -13,6 +13,20 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- **Skills were non-functional.** `WithSkills` only sent skills via the
+  initialize request; the CLI also needs the `Skill(name)` tool in
+  `--allowedTools` and a `--setting-sources` default to discover them. Now
+  replicates the official `_apply_skills_defaults`.
+- **Live `SessionStore` mirror produced nothing.** `WithSessionStore` didn't emit
+  `--session-mirror`, so the CLI never sent `transcript_mirror` frames. Now it
+  does (verified live: the store receives entries).
+- **Default system prompt.** With no system prompt configured, the SDK now emits
+  `--system-prompt ""` (matching upstream, which suppresses Claude Code's default)
+  rather than omitting the flag.
+- Added `HookEventMessage` (system/`hook_started`/`hook_response` frames under
+  `WithIncludeHookEvents`), `WithSystemPromptFile` (`--system-prompt-file`), and
+  `WithMCPConfig` (the string/path form of `mcp_servers`). These were gaps found
+  in a deeper functional sweep against the source.
 - **`--thinking` flag emission.** The SDK emitted a bare `--thinking` (rejected
   by the CLI). Replaced `WithThinking(maxTokens, effort)` with the typed
   `WithThinkingConfig` (adaptive → `--thinking adaptive`, enabled →

@@ -16,6 +16,8 @@ const (
 	systemPromptReplace
 	// systemPromptAppend appends to the default system prompt.
 	systemPromptAppend
+	// systemPromptFile loads the system prompt from a file.
+	systemPromptFile
 )
 
 // systemPromptConfig holds the system-prompt configuration.
@@ -60,6 +62,7 @@ type Options struct {
 	skills                 []string
 	excludeDynamicSections bool
 	mcpServers             map[string]McpServerConfig
+	mcpConfigRaw           string // a file path or JSON string, passed to --mcp-config directly
 
 	sandbox *SandboxSettings
 
@@ -121,6 +124,14 @@ func WithSystemPrompt(prompt string) Option {
 func WithAppendSystemPrompt(prompt string) Option {
 	return func(o *Options) {
 		o.systemPrompt = systemPromptConfig{mode: systemPromptAppend, text: prompt}
+	}
+}
+
+// WithSystemPromptFile loads the system prompt from the file at path (maps to
+// --system-prompt-file).
+func WithSystemPromptFile(path string) Option {
+	return func(o *Options) {
+		o.systemPrompt = systemPromptConfig{mode: systemPromptFile, text: path}
 	}
 }
 
@@ -406,6 +417,13 @@ func WithMCPServers(servers map[string]McpServerConfig) Option {
 			o.mcpServers[name] = cfg
 		}
 	}
+}
+
+// WithMCPConfig passes an MCP configuration directly to --mcp-config as either a
+// file path or a JSON string, mirroring the official SDK's string/path form of
+// mcp_servers. It takes precedence over [WithMCPServers] / [WithSDKMCPServer].
+func WithMCPConfig(pathOrJSON string) Option {
+	return func(o *Options) { o.mcpConfigRaw = pathOrJSON }
 }
 
 // WithSDKMCPServer registers a single in-process MCP server under name.

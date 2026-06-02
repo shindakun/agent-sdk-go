@@ -25,15 +25,23 @@ func (o *Options) buildArgs() ([]string, error) {
 
 	switch o.systemPrompt.mode {
 	case systemPromptUnset:
-		// No system-prompt flag.
+		// Matching the official SDK: with no system prompt configured, the CLI
+		// is given an empty one (suppressing Claude Code's default), not no flag.
+		args = append(args, "--system-prompt", "")
 	case systemPromptReplace:
 		args = append(args, "--system-prompt", o.systemPrompt.text)
 	case systemPromptAppend:
 		args = append(args, "--append-system-prompt", o.systemPrompt.text)
+	case systemPromptFile:
+		args = append(args, "--system-prompt-file", o.systemPrompt.text)
 	}
 
-	if len(o.allowedTools) > 0 {
-		args = append(args, "--allowedTools", joinComma(o.allowedTools))
+	// Apply skills defaults: when skills are configured, the CLI needs the
+	// Skill(name) tool(s) in allowedTools and a setting-sources default so it
+	// can discover installed skills (matching the official SDK).
+	allowed, settingSources := o.effectiveSkillsDefaults()
+	if len(allowed) > 0 {
+		args = append(args, "--allowedTools", joinComma(allowed))
 	}
 	if len(o.disallowedTools) > 0 {
 		args = append(args, "--disallowedTools", joinComma(o.disallowedTools))
@@ -92,6 +100,11 @@ func (o *Options) buildArgs() ([]string, error) {
 	if o.includeHookEvents {
 		args = append(args, "--include-hook-events")
 	}
+	// When a live SessionStore mirror is configured, tell the CLI to emit
+	// transcript_mirror frames. Without this flag no mirror frames arrive.
+	if o.sessionStore != nil {
+		args = append(args, "--session-mirror")
+	}
 	if o.taskBudget != nil {
 		args = append(args, "--task-budget", strconv.Itoa(o.taskBudget.Total))
 	}
@@ -139,8 +152,8 @@ func (o *Options) buildArgs() ([]string, error) {
 	if o.includePartialMessages {
 		args = append(args, "--include-partial-messages")
 	}
-	if len(o.settingSources) > 0 {
-		args = append(args, "--setting-sources", joinComma(o.settingSources))
+	if len(settingSources) > 0 {
+		args = append(args, "--setting-sources", joinComma(settingSources))
 	}
 
 	mcpArg, err := o.buildMcpConfig()
@@ -167,6 +180,42 @@ func (o *Options) buildArgs() ([]string, error) {
 	}
 
 	return args, nil
+}
+
+// effectiveSkillsDefaults computes the allowedTools and setting-sources after
+// applying skills defaults, matching the official SDK's _apply_skills_defaults:
+// each configured skill injects a Skill(name) tool, and setting-sources defaults
+// to ["user","project"] when unset so the CLI discovers installed skills. The
+// original Options is not mutated.
+func (o *Options) effectiveSkillsDefaults() (allowed, settingSources []string) {
+	allowed = append([]string(nil), o.allowedTools...)
+	if len(o.settingSources) > 0 {
+		settingSources = append([]string(nil), o.settingSources...)
+	}
+
+	if len(o.skills) == 0 {
+		return allowed, settingSources
+	}
+
+	for _, name := range o.skills {
+		pattern := "Skill(" + name + ")"
+		if !contains(allowed, pattern) {
+			allowed = append(allowed, pattern)
+		}
+	}
+	if settingSources == nil {
+		settingSources = []string{"user", "project"}
+	}
+	return allowed, settingSources
+}
+
+func contains(ss []string, s string) bool {
+	for _, x := range ss {
+		if x == s {
+			return true
+		}
+	}
+	return false
 }
 
 // buildSettings returns the value for --settings. When a sandbox is configured,
@@ -236,6 +285,10 @@ func (o *Options) buildInitializeRequest(reg *callbackRegistry) (protocol.Initia
 // CLI expects via --mcp-config. In-process SdkMcpServers are emitted with type
 // "sdk"; external servers carry their command/url configuration.
 func (o *Options) buildMcpConfig() (string, error) {
+	// A raw file path / JSON string is passed through directly.
+	if o.mcpConfigRaw != "" {
+		return o.mcpConfigRaw, nil
+	}
 	if len(o.mcpServers) == 0 {
 		return "", nil
 	}

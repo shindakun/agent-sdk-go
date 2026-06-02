@@ -166,6 +166,8 @@ func decodeSystem(b []byte) (Message, error) {
 		}
 		m.Raw = clone(b)
 		return &m, nil
+	case "hook_started", "hook_response":
+		return decodeHookEvent(b, env.Subtype, env.SessionID)
 	}
 	// "init" carries session_id and tools at the top level rather than in data.
 	data := env.Data
@@ -179,6 +181,36 @@ func decodeSystem(b []byte) (Message, error) {
 		Plugins:   env.Plugins,
 		Data:      data,
 		Raw:       clone(b),
+	}, nil
+}
+
+// decodeHookEvent builds a HookEventMessage from a system/hook_started|
+// hook_response frame, preferring the hook_event/hook_name/hook_event_name keys
+// in that order (matching the official parser).
+func decodeHookEvent(b []byte, subtype, sessionID string) (Message, error) {
+	var env struct {
+		HookEvent     string `json:"hook_event"`
+		HookName      string `json:"hook_name"`
+		HookEventName string `json:"hook_event_name"`
+		UUID          string `json:"uuid"`
+	}
+	if err := json.Unmarshal(b, &env); err != nil {
+		return nil, &MessageParseError{Type: "system/" + subtype, Raw: clone(b), Err: err}
+	}
+	name := env.HookEvent
+	if name == "" {
+		name = env.HookName
+	}
+	if name == "" {
+		name = env.HookEventName
+	}
+	return &HookEventMessage{
+		Subtype:       subtype,
+		HookEventName: name,
+		SessionID:     sessionID,
+		UUID:          env.UUID,
+		Data:          clone(b),
+		Raw:           clone(b),
 	}, nil
 }
 

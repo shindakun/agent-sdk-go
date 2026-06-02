@@ -5,7 +5,8 @@ This maps the Go port name-for-name against the reference
 Parity is **mechanically verified** against a clone of the source at three
 levels — names, fields, and enum values — using AST extraction, not eyeballing:
 
-- Public names (`__all__`): **123/123** covered (5 documented N/A below).
+- Public names (`__all__`): **123/123** accounted for — 119 with a Go
+  equivalent, 4 documented N/A below.
 - `ClaudeAgentOptions` fields: **45/45** covered (2 documented N/A below).
 - **Per-type field sets**: every public dataclass/TypedDict field diffed against
   the Go struct (incl. nested-vs-top-level decode sources).
@@ -151,12 +152,19 @@ Public names exported by Python but intentionally absent in Go, with the reason:
 - `__version__` → exported as `Version`.
 - `Transport` → the transport is an internal abstraction
   (`internal/transport.Transport`); the public API is `Query`/`Client`.
-- `HookContext`, `HookEventMessage` → Python typing/runtime shims with no Go
-  analogue; hook callbacks receive the raw payload plus typed `Decode*` helpers.
-- `McpServerStatusConfig` → an output-only sub-shape of MCP status; folded into
-  `McpServerStatusInfo.Config` (raw JSON).
+- `HookContext` → a TypedDict whose only field, `signal`, is reserved
+  (upstream always passes `None` — abort-signal support is a TODO). The Go
+  `HookCallback` already receives a `context.Context`, the idiomatic cancellation
+  carrier, so a separate type carries no information today.
+- `McpServerStatusConfig` → an output-only union (the type of
+  `McpServerStatus.config`); folded into `McpServerStatusInfo.Config` (raw JSON).
 - `ClaudeSDKError` → Python's base exception; Go uses concrete typed errors and
-  `errors.Is`/`errors.As`.
+  `errors.Is`/`errors.As` (every concrete error in `_errors.py` has a Go
+  equivalent).
+
+`HookEventMessage` is now a real Go type (it was previously, wrongly, listed
+here) — emitted as a `*HookEventMessage` for `system`/`hook_started`/
+`hook_response` frames when `WithIncludeHookEvents` is set.
 
 Options exported by Python but N/A in Go:
 

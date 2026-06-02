@@ -301,3 +301,82 @@ func TestSystemInitPluginsDecode(t *testing.T) {
 		t.Errorf("plugin = %+v", p)
 	}
 }
+
+func TestHookEventMessageDecode(t *testing.T) {
+	for _, sub := range []string{"hook_started", "hook_response"} {
+		line := []byte(`{"type":"system","subtype":"` + sub + `","hook_event":"PreToolUse","session_id":"s1","uuid":"u1"}`)
+		msg, err := UnmarshalMessage(line)
+		if err != nil {
+			t.Fatalf("%s: %v", sub, err)
+		}
+		hm, ok := msg.(*HookEventMessage)
+		if !ok {
+			t.Fatalf("%s: got %T", sub, msg)
+		}
+		if hm.Subtype != sub || hm.HookEventName != "PreToolUse" || hm.SessionID != "s1" || hm.UUID != "u1" {
+			t.Errorf("%s: %+v", sub, hm)
+		}
+	}
+	// Falls back through hook_name then hook_event_name.
+	msg, _ := UnmarshalMessage([]byte(`{"type":"system","subtype":"hook_started","hook_name":"Stop"}`))
+	if hm := msg.(*HookEventMessage); hm.HookEventName != "Stop" {
+		t.Errorf("hook_name fallback = %q", hm.HookEventName)
+	}
+}
+
+func TestSystemPromptModes(t *testing.T) {
+	// Unset -> empty system prompt (matches upstream).
+	args, _ := newOptions().buildArgs()
+	if !argsContainPair(args, "--system-prompt", "") {
+		t.Errorf("unset should emit --system-prompt \"\"; args=%v", args)
+	}
+	// Replace.
+	args, _ = newOptions(WithSystemPrompt("be terse")).buildArgs()
+	if !argsContainPair(args, "--system-prompt", "be terse") {
+		t.Errorf("replace; args=%v", args)
+	}
+	// Append.
+	args, _ = newOptions(WithAppendSystemPrompt("also this")).buildArgs()
+	if !argsContainPair(args, "--append-system-prompt", "also this") {
+		t.Errorf("append; args=%v", args)
+	}
+	// File.
+	args, _ = newOptions(WithSystemPromptFile("/tmp/sp.txt")).buildArgs()
+	if !argsContainPair(args, "--system-prompt-file", "/tmp/sp.txt") {
+		t.Errorf("file; args=%v", args)
+	}
+}
+
+func TestSkillsDefaults(t *testing.T) {
+	// Skills inject Skill(name) into allowedTools and default setting-sources.
+	args, _ := newOptions(WithSkills("my-skill", "other")).buildArgs()
+	if !argsContainPair(args, "--allowedTools", "Skill(my-skill),Skill(other)") {
+		t.Errorf("skills not injected into allowedTools; args=%v", args)
+	}
+	if !argsContainPair(args, "--setting-sources", "user,project") {
+		t.Errorf("setting-sources default missing; args=%v", args)
+	}
+	// Explicit setting-sources is preserved.
+	args, _ = newOptions(WithSkills("s"), WithSettingSources("local")).buildArgs()
+	if !argsContainPair(args, "--setting-sources", "local") {
+		t.Errorf("explicit setting-sources overridden; args=%v", args)
+	}
+	// No skills -> no injection.
+	args, _ = newOptions(WithAllowedTools("Read")).buildArgs()
+	if !argsContainPair(args, "--allowedTools", "Read") {
+		t.Errorf("plain allowedTools; args=%v", args)
+	}
+}
+
+func TestSessionMirrorFlag(t *testing.T) {
+	store := NewInMemorySessionStore()
+	args, _ := newOptions(WithSessionStore(store, FlushBatched)).buildArgs()
+	if !argsContainsFlag(args, "--session-mirror") {
+		t.Errorf("WithSessionStore should emit --session-mirror; args=%v", args)
+	}
+	// No store -> no flag.
+	args, _ = newOptions().buildArgs()
+	if argsContainsFlag(args, "--session-mirror") {
+		t.Errorf("--session-mirror should not be emitted without a store")
+	}
+}
