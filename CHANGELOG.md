@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format is based on
 
 ## Unreleased
 
+## [v0.1.0] - 2026-06-03
+
 ### Summary
 
 First tagged release: a faithful, idiomatic-Go port of
