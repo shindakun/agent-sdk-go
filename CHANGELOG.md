@@ -5,6 +5,17 @@ All notable changes to this project are documented here. The format is based on
 
 ## Unreleased
 
+### Summary
+
+First tagged release: a faithful, idiomatic-Go port of
+`anthropics/claude-agent-sdk-python`, verified name-for-name (119/123 public
+names, 4 documented N/A; 45/45 options) and behaviorally against Claude Code CLI
+**2.1.161** via integration and e2e suites. Includes `Query`/`Collect`, the
+interactive `Client` (with `ReceiveResponse`), in-process SDK MCP tools, hooks,
+permissions, sessions + store, the full typed message/option surface, 16
+examples, CI (lint/test/e2e), the upstream-watch automation, and a pinned
+`SupportedCLIVersion`. Details below.
+
 ### Re-synced to Claude Code CLI 2.1.161
 
 - Bumped `SupportedCLIVersion` to `2.1.161`. Upstream commit `8e11815` was a pure

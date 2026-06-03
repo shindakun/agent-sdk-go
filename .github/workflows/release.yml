@@ -1,0 +1,70 @@
+name: Release
+
+# Fires when a semver tag is pushed (e.g. v0.1.0). Runs the test suite, then
+# creates a GitHub Release whose notes are the matching CHANGELOG.md section.
+# Tagging is a deliberate manual step (see scripts/release.sh / RELEASING.md);
+# this workflow only publishes the Release object.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.x"
+          check-latest: true
+      - run: go build ./...
+      - run: go test -race ./...
+
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract CHANGELOG section for this tag
+        id: notes
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          ver="${tag#v}"
+          # Pull the body between the heading for this version and the next
+          # "## " heading. Matches "## [v0.1.0]..." or "## v0.1.0..." or
+          # "## 0.1.0...".
+          awk -v ver="$ver" -v tag="$tag" '
+            $0 ~ "^## \\[?(v?" ver "|" tag ")\\]?" { grab=1; next }
+            grab && /^## / { exit }
+            grab { print }
+          ' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "No CHANGELOG section found for $tag; using a generic note." >&2
+            printf 'Release %s.\n' "$tag" > release-notes.md
+          fi
+          echo "Notes for $tag:"; cat release-notes.md
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          prerelease=()
+          case "$tag" in
+            v0.*|*-*) prerelease=(--prerelease) ;;
+          esac
+          gh release create "$tag" \
+            --title "$tag" \
+            --notes-file release-notes.md \
+            --verify-tag \
+            "${prerelease[@]}"
