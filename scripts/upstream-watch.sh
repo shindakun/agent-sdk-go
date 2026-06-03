@@ -104,28 +104,51 @@ commit_subject() {
 	gh api "repos/$UPSTREAM_REPO/commits/$1" --jq '.commit.message' | head -1
 }
 
+# cli_version_from_commit <sha> -> the new CLI version, read from the added line
+# of the _cli_version.py patch (authoritative), or the conventional subject as a
+# fallback. Empty if neither yields one.
+cli_version_from_commit() {
+	local sha="$1" ver
+	ver="$(gh api "repos/$UPSTREAM_REPO/commits/$sha" \
+		--jq '.files[] | select(.filename == "src/claude_agent_sdk/_cli_version.py") | .patch' 2>/dev/null \
+		| grep -E '^\+' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+	if [ -z "$ver" ]; then
+		ver="$(commit_subject "$sha" | grep -ioE 'bump bundled cli version to [0-9]+\.[0-9]+\.[0-9]+' \
+			| grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+	fi
+	printf '%s' "$ver"
+}
+
 # classify <sha> -> echoes one of: cli-bump | ignore | review
 classify() {
 	local sha="$1" subject files
 	subject="$(commit_subject "$sha")"
 	files="$(commit_files "$sha")"
 
-	# CLI bump: conventional message, or only _cli_version.py / CHANGELOG touched.
-	if printf '%s' "$subject" | grep -qiE '^chore: bump bundled cli version'; then
-		echo "cli-bump"; return
-	fi
-	local non_bump
-	non_bump="$(printf '%s\n' "$files" | grep -vE '^(src/claude_agent_sdk/_cli_version\.py|CHANGELOG\.md)$' || true)"
-	if [ -z "$non_bump" ] && [ -n "$files" ]; then
-		echo "cli-bump"; return
-	fi
-
-	# Needs review: any SDK source outside _cli_version.py.
-	if printf '%s\n' "$files" | grep -qE '^src/claude_agent_sdk/' \
-		&& printf '%s\n' "$files" | grep -vqE '^src/claude_agent_sdk/_cli_version\.py$'; then
+	# A CLI bump MUST touch _cli_version.py. The conventional subject alone is
+	# not enough — and a CHANGELOG-only or release/version commit is NOT a CLI
+	# bump (those are no-ops for the Go port).
+	if printf '%s\n' "$files" | grep -qE '^src/claude_agent_sdk/_cli_version\.py$'; then
+		# If _cli_version.py is the only SDK source touched, it's a clean bump.
+		if ! printf '%s\n' "$files" | grep -qE '^src/claude_agent_sdk/' \
+			|| ! printf '%s\n' "$files" | grep -vqE '^src/claude_agent_sdk/_cli_version\.py$'; then
+			echo "cli-bump"; return
+		fi
+		# _cli_version.py changed alongside other SDK source -> still review.
 		echo "review"; return
 	fi
 
+	# Needs review: any SDK *source* change. _version.py (the Python package
+	# version, like _cli_version.py) and py.typed are not source and are no-ops
+	# for the Go port, so exclude them.
+	if printf '%s\n' "$files" \
+		| grep -E '^src/claude_agent_sdk/' \
+		| grep -vqE '^src/claude_agent_sdk/(_version\.py|py\.typed)$'; then
+		echo "review"; return
+	fi
+
+	# Everything else (CHANGELOG, pyproject, _version.py, docs, CI, examples,
+	# tests) is a no-op for the Go port.
 	echo "ignore"
 }
 
@@ -139,7 +162,7 @@ rollup_issue_number() {
 append_cli_bump() {
 	local sha="$1" subject ver link body
 	subject="$(commit_subject "$sha")"
-	ver="$(printf '%s' "$subject" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+	ver="$(cli_version_from_commit "$sha")"
 	link="https://github.com/$UPSTREAM_REPO/commit/$sha"
 	body="- CLI **${ver:-?}** — [\`${sha:0:7}\`]($link) — $subject
 
