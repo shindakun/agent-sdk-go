@@ -19,7 +19,7 @@ levels — names, fields, and enum values — using AST extraction, not eyeballi
 
 Addresses [claude-agent-sdk-python#498](https://github.com/anthropics/claude-agent-sdk-python/issues/498).
 
-**Verified against Claude Code CLI 2.1.160** — the version the upstream SDK
+**Verified against Claude Code CLI 2.1.161** — the version the upstream SDK
 bundles (`_cli_version.py`), matching the installed binary. In addition to the
 static checks above, an integration suite (`go test -tags integration`) runs the
 **real binary** for: one-shot query, multi-turn client, custom Go tool, CanUseTool

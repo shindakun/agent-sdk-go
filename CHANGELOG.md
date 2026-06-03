@@ -5,6 +5,14 @@ All notable changes to this project are documented here. The format is based on
 
 ## Unreleased
 
+### Re-synced to Claude Code CLI 2.1.161
+
+- Bumped `SupportedCLIVersion` to `2.1.161`. Upstream commit `8e11815` was a pure
+  `_cli_version.py` bump (no SDK source change — verified via the per-commit
+  diff), so no port work was needed. Re-ran the name diff (0 missing, 119/123
+  covered) and the integration + e2e tiers against 2.1.161; all green.
+  `CheckCLIVersion` confirms installed == pinned.
+
 ### Re-synced to Claude Code CLI 2.1.160
 
 - Bumped `SupportedCLIVersion` to `2.1.160`. Upstream commit `6d93523` was a

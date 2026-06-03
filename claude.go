@@ -27,4 +27,4 @@ const Version = "0.0.1"
 // (`_cli_version.py`). Unlike the Python/TS SDKs, this SDK does not bundle the
 // CLI; it requires `claude` on PATH. The pin records the known-good version for
 // parity audits and lets callers warn on a mismatch via [CheckCLIVersion].
-const SupportedCLIVersion = "2.1.160"
+const SupportedCLIVersion = "2.1.161"

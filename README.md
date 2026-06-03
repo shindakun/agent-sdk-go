@@ -17,7 +17,7 @@ and context management; this SDK owns process lifecycle, framing,
 control-protocol correlation, and dispatch of in-process callbacks (permissions,
 hooks, and SDK MCP tools).
 
-Verified against **Claude Code CLI 2.1.160** (the version the upstream SDK
+Verified against **Claude Code CLI 2.1.161** (the version the upstream SDK
 bundles, pinned as `claude.SupportedCLIVersion`) — statically (123/123 public
 names, 45/45 options) and behaviorally (an integration suite that runs against
 the real binary). `claude.CheckCLIVersion` reports the installed binary's
@@ -222,7 +222,7 @@ See [CLAUDE.md](CLAUDE.md) for the codebase map and the parity workflow.
 ## Parity
 
 Verified name-for-name and field-for-field against
-`claude-agent-sdk-python` (CLI 2.1.160): all 123 public `__all__` names and 45
+`claude-agent-sdk-python` (CLI 2.1.161): all 123 public `__all__` names and 45
 `ClaudeAgentOptions` fields covered (a handful of Python-runtime-specific names
 documented N/A), with behavioral checks against the real binary. See
 [PARITY.md](PARITY.md).
