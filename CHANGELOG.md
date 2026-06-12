@@ -5,6 +5,21 @@ All notable changes to this project are documented here. The format is based on
 
 ## Unreleased
 
+### Re-synced to Claude Code CLI 2.1.175
+
+- Bumped `SupportedCLIVersion` to `2.1.175`. The upstream range from 2.1.161 to
+  2.1.175 (commits `6772ffc`…`de4562d`) was a run of pure CLI-version bumps — the
+  only `src/claude_agent_sdk/` changes besides `_cli_version.py` were `_version.py`
+  (the Python package version) and a test-conformance helper, neither of which is
+  SDK source to port (verified via the aggregate `8e11815...de4562d` diff). No
+  port work needed.
+- Re-ran the name diff against the 2.1.175 reference: 0 missing (119/123, 4 N/A).
+  Static (build/vet/gofmt/golangci-lint) clean; unit `-race`, integration, and an
+  e2e subset (structured output, hook deny, SDK MCP permission enforcement,
+  plugin) green against the live binary. `CheckCLIVersion` confirms installed ==
+  pinned (2.1.175). The bumps were surfaced and correctly classified by the
+  upstream-watch workflow.
+
 ## [v0.1.0] - 2026-06-03
 
 ### Summary
