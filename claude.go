@@ -20,7 +20,7 @@
 package claude
 
 // Version is the SDK version.
-const Version = "0.1.0"
+const Version = "0.1.1"
 
 // SupportedCLIVersion is the Claude Code CLI version this SDK was verified
 // against — the version the upstream `claude-agent-sdk-python` bundles
