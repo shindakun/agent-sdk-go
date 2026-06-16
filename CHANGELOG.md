@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format is based on
 
 ## Unreleased
 
+## [v0.2.1] - 2026-06-15
+
 ### Fixed
 
 - **Data race on the captured session id.** The read loop wrote `session.sessionID`
