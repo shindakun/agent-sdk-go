@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format is based on
 
 ## Unreleased
 
+## [v0.2.0] - 2026-06-15
+
 ### Added
 
 - **`TaskUpdatedMessage`** (and `TaskUpdatedStatus`, `TerminalTaskStatuses` /
