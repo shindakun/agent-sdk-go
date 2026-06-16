@@ -161,6 +161,23 @@ type TaskNotificationMessage struct {
 
 func (*TaskNotificationMessage) isMessage() {}
 
+// TaskUpdatedMessage is emitted as a background task's state changes
+// (system/task_updated). Patch carries the changed fields (e.g. status,
+// end_time); Status mirrors patch.status when present. A task's terminal state
+// can arrive *only* here (no accompanying TaskNotificationMessage) — for example
+// a task stopped via StopTask reports Status "killed". Use [IsTerminalTaskStatus]
+// to detect completion across both message types.
+type TaskUpdatedMessage struct {
+	TaskID    string            `json:"task_id"`
+	Patch     json.RawMessage   `json:"patch"`
+	Status    TaskUpdatedStatus `json:"-"` // extracted from patch.status
+	SessionID string            `json:"session_id,omitempty"`
+	UUID      string            `json:"uuid,omitempty"`
+	Raw       json.RawMessage
+}
+
+func (*TaskUpdatedMessage) isMessage() {}
+
 // HookEventMessage is a hook lifecycle event emitted on the stream when
 // [WithIncludeHookEvents] is set. It arrives as a system message with subtype
 // "hook_started" (a hook begins) or "hook_response" (a hook completes).

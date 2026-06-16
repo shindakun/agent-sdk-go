@@ -17,8 +17,8 @@ and context management; this SDK owns process lifecycle, framing,
 control-protocol correlation, and dispatch of in-process callbacks (permissions,
 hooks, and SDK MCP tools).
 
-Verified against **Claude Code CLI 2.1.175** (the version the upstream SDK
-bundles, pinned as `claude.SupportedCLIVersion`) — statically (123/123 public
+Verified against **Claude Code CLI 2.1.178** (the version the upstream SDK
+bundles, pinned as `claude.SupportedCLIVersion`) — statically (126/126 public
 names, 45/45 options) and behaviorally (an integration suite that runs against
 the real binary). `claude.CheckCLIVersion` reports the installed binary's
 version and whether it matches the pin.
@@ -158,7 +158,8 @@ claude.WithCanUseTool(func(ctx context.Context, tool string, input json.RawMessa
 
 The streamed `Message` union: `AssistantMessage`, `UserMessage`, `SystemMessage`,
 `ResultMessage`, `StreamEvent`, `TaskStartedMessage`, `TaskProgressMessage`,
-`TaskNotificationMessage`, `RateLimitEvent`, `MirrorErrorMessage`. Content blocks:
+`TaskNotificationMessage`, `TaskUpdatedMessage`, `RateLimitEvent`,
+`MirrorErrorMessage`. Content blocks:
 `TextBlock`, `ThinkingBlock`, `ToolUseBlock`, `ToolResultBlock`,
 `ServerToolUseBlock`, `ServerToolResultBlock`.
 
@@ -222,7 +223,7 @@ See [CLAUDE.md](CLAUDE.md) for the codebase map and the parity workflow.
 ## Parity
 
 Verified name-for-name and field-for-field against
-`claude-agent-sdk-python` (CLI 2.1.175): all 123 public `__all__` names and 45
+`claude-agent-sdk-python` (CLI 2.1.178): all 126 public `__all__` names and 45
 `ClaudeAgentOptions` fields covered (a handful of Python-runtime-specific names
 documented N/A), with behavioral checks against the real binary. See
 [PARITY.md](PARITY.md).

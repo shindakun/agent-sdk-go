@@ -380,3 +380,60 @@ func TestSessionMirrorFlag(t *testing.T) {
 		t.Errorf("--session-mirror should not be emitted without a store")
 	}
 }
+
+func TestTaskUpdatedDecode(t *testing.T) {
+	// status is extracted from patch.status; terminal "killed" must be detected.
+	line := []byte(`{"type":"system","subtype":"task_updated","task_id":"t1","session_id":"s","uuid":"u","patch":{"status":"killed","end_time":123}}`)
+	msg, err := UnmarshalMessage(line)
+	if err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	tu, ok := msg.(*TaskUpdatedMessage)
+	if !ok {
+		t.Fatalf("got %T, want *TaskUpdatedMessage", msg)
+	}
+	if tu.TaskID != "t1" || tu.SessionID != "s" || tu.UUID != "u" {
+		t.Errorf("fields = %+v", tu)
+	}
+	if tu.Status != TaskUpdatedKilled {
+		t.Errorf("status = %q, want killed", tu.Status)
+	}
+	if !IsTerminalTaskStatus(string(tu.Status)) {
+		t.Error("killed should be a terminal status")
+	}
+	// patch preserved
+	if len(tu.Patch) == 0 {
+		t.Error("patch not preserved")
+	}
+}
+
+func TestTaskUpdatedDefensive(t *testing.T) {
+	// A task_updated with no/odd patch must not raise and yields empty status.
+	for _, line := range []string{
+		`{"type":"system","subtype":"task_updated","task_id":"t2"}`,
+		`{"type":"system","subtype":"task_updated","task_id":"t3","patch":"not-an-object"}`,
+		`{"type":"system","subtype":"task_updated","task_id":"t4","patch":{"end_time":9}}`,
+	} {
+		msg, err := UnmarshalMessage([]byte(line))
+		if err != nil {
+			t.Fatalf("unmarshal %q: %v", line, err)
+		}
+		tu := msg.(*TaskUpdatedMessage)
+		if tu.Status != "" {
+			t.Errorf("%q: status = %q, want empty", line, tu.Status)
+		}
+	}
+}
+
+func TestTerminalTaskStatusBothVocabularies(t *testing.T) {
+	for _, s := range []string{"completed", "failed", "stopped", "killed"} {
+		if !IsTerminalTaskStatus(s) {
+			t.Errorf("%q should be terminal", s)
+		}
+	}
+	for _, s := range []string{"pending", "running", "paused", ""} {
+		if IsTerminalTaskStatus(s) {
+			t.Errorf("%q should not be terminal", s)
+		}
+	}
+}

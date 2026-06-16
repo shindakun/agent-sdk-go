@@ -74,6 +74,38 @@ const (
 	TaskStopped   TaskNotificationStatus = "stopped"
 )
 
+// TaskUpdatedStatus is the status reported inside a task_updated patch.
+// pending/running/paused are non-terminal; completed/failed/killed are terminal.
+// task_updated reports the raw "killed"; the CLI maps that to "stopped" only when
+// it also emits a task_notification.
+type TaskUpdatedStatus string
+
+const (
+	TaskUpdatedPending   TaskUpdatedStatus = "pending"
+	TaskUpdatedRunning   TaskUpdatedStatus = "running"
+	TaskUpdatedPaused    TaskUpdatedStatus = "paused"
+	TaskUpdatedCompleted TaskUpdatedStatus = "completed"
+	TaskUpdatedFailed    TaskUpdatedStatus = "failed"
+	TaskUpdatedKilled    TaskUpdatedStatus = "killed"
+)
+
+// TerminalTaskStatuses are the statuses meaning a task has finished and should
+// be cleared from any "active task" tracking. It spans both lifecycle
+// vocabularies: task_notification reports "stopped" (the CLI's mapped form of a
+// killed task) while task_updated reports the raw "killed". Mirrors the upstream
+// TERMINAL_TASK_STATUSES set. Query membership via [IsTerminalTaskStatus].
+var TerminalTaskStatuses = map[string]struct{}{
+	"completed": {}, "failed": {}, "stopped": {}, "killed": {},
+}
+
+// IsTerminalTaskStatus reports whether status means a task has finished, across
+// both the TaskNotificationMessage ("stopped") and TaskUpdatedMessage ("killed")
+// vocabularies.
+func IsTerminalTaskStatus(status string) bool {
+	_, ok := TerminalTaskStatuses[status]
+	return ok
+}
+
 // --- Sandbox configuration ---------------------------------------------------
 
 // SandboxSettings configures the CLI's command sandbox.

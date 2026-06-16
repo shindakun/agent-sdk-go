@@ -166,6 +166,8 @@ func decodeSystem(b []byte) (Message, error) {
 		}
 		m.Raw = clone(b)
 		return &m, nil
+	case "task_updated":
+		return decodeTaskUpdated(b)
 	case "hook_started", "hook_response":
 		return decodeHookEvent(b, env.Subtype, env.SessionID)
 	}
@@ -211,6 +213,38 @@ func decodeHookEvent(b []byte, subtype, sessionID string) (Message, error) {
 		UUID:          env.UUID,
 		Data:          clone(b),
 		Raw:           clone(b),
+	}, nil
+}
+
+// decodeTaskUpdated parses a system/task_updated frame. Parsed defensively: the
+// patch may be absent or not an object, and status is taken from patch.status
+// (left empty when absent). Mirrors the upstream parser, which never raises on a
+// lifecycle event.
+func decodeTaskUpdated(b []byte) (Message, error) {
+	var env struct {
+		TaskID    string          `json:"task_id"`
+		Patch     json.RawMessage `json:"patch"`
+		SessionID string          `json:"session_id"`
+		UUID      string          `json:"uuid"`
+	}
+	if err := json.Unmarshal(b, &env); err != nil {
+		return nil, &MessageParseError{Type: "system/task_updated", Raw: clone(b), Err: err}
+	}
+	var status TaskUpdatedStatus
+	if len(env.Patch) > 0 {
+		var p struct {
+			Status TaskUpdatedStatus `json:"status"`
+		}
+		_ = json.Unmarshal(env.Patch, &p) // patch may not be an object; ignore
+		status = p.Status
+	}
+	return &TaskUpdatedMessage{
+		TaskID:    env.TaskID,
+		Patch:     env.Patch,
+		Status:    status,
+		SessionID: env.SessionID,
+		UUID:      env.UUID,
+		Raw:       clone(b),
 	}, nil
 }
 

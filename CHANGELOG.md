@@ -5,6 +5,27 @@ All notable changes to this project are documented here. The format is based on
 
 ## Unreleased
 
+### Added
+
+- **`TaskUpdatedMessage`** (and `TaskUpdatedStatus`, `TerminalTaskStatuses` /
+  `IsTerminalTaskStatus`) — ports upstream's new `system`/`task_updated` lifecycle
+  event (claude-agent-sdk-python `141c37f`). A background task's terminal state
+  can arrive *only* here (e.g. a task stopped via `StopTask` reports
+  `Status: "killed"` with no accompanying `TaskNotificationMessage`); use
+  `IsTerminalTaskStatus` to detect completion across both message types. Decoded
+  defensively — the patch may omit fields and parsing never fails on a lifecycle
+  event.
+
+### Re-synced to Claude Code CLI 2.1.178
+
+- Bumped `SupportedCLIVersion` to `2.1.178`. The 2.1.175→2.1.178 range was CLI
+  bumps plus the one `task_updated` feature above (verified via the aggregate
+  `de4562d...HEAD` diff: no other SDK source changed). Name diff now **126/126**
+  (122 covered, 4 N/A) — the feature added `TaskUpdatedMessage`,
+  `TaskUpdatedStatus`, and `TERMINAL_TASK_STATUSES`. Static, unit `-race`,
+  integration, and an e2e subset green against the live binary; `CheckCLIVersion`
+  confirms installed == pinned.
+
 ## [v0.1.1] - 2026-06-12
 
 ### Re-synced to Claude Code CLI 2.1.175
