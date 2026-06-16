@@ -109,9 +109,7 @@ func (c *Client) readLoop() {
 
 func (c *Client) captureSessionID(msg Message) {
 	if sm, ok := msg.(*SystemMessage); ok && sm.Subtype == "init" && sm.SessionID != "" {
-		c.mu.Lock()
-		c.sess.sessionID = sm.SessionID
-		c.mu.Unlock()
+		c.sess.setSessionID(sm.SessionID)
 	}
 }
 

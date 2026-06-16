@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"sync"
 
 	"github.com/shindakun/agent-sdk-go/internal/protocol"
 	"github.com/shindakun/agent-sdk-go/internal/transport"
@@ -23,8 +24,10 @@ type session struct {
 	t      transport.Transport
 	engine *protocol.Engine
 	// sessionID is the CLI-assigned session id, learned from the system/init
-	// message. Until then prompts use the "default" session id, matching the
-	// official SDKs.
+	// message (written by the read loop) and read when sending prompts. Guard it
+	// with sidMu since those run on different goroutines. Until learned, prompts
+	// use the "default" session id, matching the official SDKs.
+	sidMu     sync.Mutex
 	sessionID string
 	registry  *callbackRegistry
 	mirror    *mirrorBatcher
@@ -120,10 +123,24 @@ func (s *session) sendPrompt(ctx context.Context, prompt string) error {
 
 // sendPromptSession writes a prompt with an explicit session id. An empty
 // sessionID falls back to the captured session id, then "default".
+// setSessionID records the CLI-assigned session id (called from the read loop).
+func (s *session) setSessionID(id string) {
+	s.sidMu.Lock()
+	s.sessionID = id
+	s.sidMu.Unlock()
+}
+
+// getSessionID returns the captured session id, or "" if not yet learned.
+func (s *session) getSessionID() string {
+	s.sidMu.Lock()
+	defer s.sidMu.Unlock()
+	return s.sessionID
+}
+
 func (s *session) sendPromptSession(ctx context.Context, prompt, sessionID string) error {
 	sid := sessionID
 	if sid == "" {
-		sid = s.sessionID
+		sid = s.getSessionID()
 	}
 	if sid == "" {
 		sid = "default"

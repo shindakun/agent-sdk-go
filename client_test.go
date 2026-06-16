@@ -136,9 +136,7 @@ func TestClientOperationsAfterCloseFail(t *testing.T) {
 // helpers --------------------------------------------------------------------
 
 func (c *Client) sessionIDForTest() string {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.sess.sessionID
+	return c.sess.getSessionID()
 }
 
 func drainToResult(t *testing.T, recv <-chan Result) *ResultMessage {

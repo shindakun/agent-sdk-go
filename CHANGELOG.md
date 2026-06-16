@@ -5,6 +5,15 @@ All notable changes to this project are documented here. The format is based on
 
 ## Unreleased
 
+### Fixed
+
+- **Data race on the captured session id.** The read loop wrote `session.sessionID`
+  (under the Client mutex) while `sendPrompt` read it with no lock — different
+  synchronization on the same field. `sessionID` now has its own mutex with
+  `get`/`set` accessors. Caught by `go test -race` in CI; reproduces locally under
+  `-race -count=30` and is clean after the fix (verified 50× on the test, 20× on
+  the full suite).
+
 ## [v0.2.0] - 2026-06-15
 
 ### Added
