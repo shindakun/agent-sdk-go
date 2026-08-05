@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format is based on
 
 ## Unreleased
 
+## [v0.3.0] - 2026-08-04
+
 ### Changed
 
 - **Breaking: `ResultMessage.ModelUsage` is now `map[string]ModelUsage`** rather
