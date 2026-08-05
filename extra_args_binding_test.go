@@ -1,6 +1,10 @@
 package claude
 
-import "testing"
+import (
+	"runtime"
+	"strings"
+	"testing"
+)
 
 // TestExtraArgsValueBinding pins the argv shape of extraArgs values. A
 // dash-leading value must bind to its flag, or the CLI parses it as a separate
@@ -41,14 +45,35 @@ func TestExtraArgsValueBinding(t *testing.T) {
 	}
 }
 
-// TestRejectWindowsCmdMetacharacters is a POSIX host, so the guard is inert
-// here by design; assert that explicitly so the platform gate stays honest.
-func TestRejectWindowsCmdMetacharactersIsPOSIXInert(t *testing.T) {
-	if err := rejectWindowsCmdMetacharacters("resume", "R&D notes\n"); err != nil {
+// TestRejectWindowsCmdMetacharacters pins the platform gate in both
+// directions: the guard rejects cmd.exe metacharacters on Windows and is inert
+// everywhere else. A resume value may be an arbitrary session title, so
+// rejecting "R&D notes" off Windows would be a real regression.
+func TestRejectWindowsCmdMetacharacters(t *testing.T) {
+	const bad = "R&D notes"
+	err := rejectWindowsCmdMetacharacters("resume", bad+"\n")
+	_, buildErr := newOptions(WithResume(bad)).buildArgs()
+
+	if runtime.GOOS == "windows" {
+		if err == nil {
+			t.Error("guard must reject cmd.exe metacharacters on Windows")
+		} else {
+			for _, want := range []string{"&", `\n`} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error should name the offending character %q, got %v", want, err)
+				}
+			}
+		}
+		if buildErr == nil {
+			t.Error("buildArgs must reject a metacharacter-bearing resume on Windows")
+		}
+		return
+	}
+
+	if err != nil {
 		t.Errorf("guard must be inert off Windows, got %v", err)
 	}
-	o := newOptions(WithResume("R&D notes"))
-	if _, err := o.buildArgs(); err != nil {
-		t.Errorf("buildArgs must not reject metacharacters off Windows: %v", err)
+	if buildErr != nil {
+		t.Errorf("buildArgs must not reject metacharacters off Windows: %v", buildErr)
 	}
 }

@@ -50,6 +50,17 @@ func (s *session) connect(ctx context.Context) error {
 		return err
 	}
 
+	// Advisory: a CanUseTool callback that is auto-approved away never fires,
+	// which is indistinguishable from it having granted permission. Emitted
+	// once per connect, before the spawn, so it is visible even if the CLI
+	// fails to start. Callers can inspect the same condition programmatically
+	// via Options.CanUseToolShadowed.
+	if s.opts.stderr != nil {
+		if msg := s.opts.canUseToolShadowedWarning(); msg != "" {
+			_, _ = io.WriteString(s.opts.stderr, msg+"\n")
+		}
+	}
+
 	s.t = transportFactory(transport.Config{
 		CLIPath:                 s.opts.cliPath,
 		Args:                    args,

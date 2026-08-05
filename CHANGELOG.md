@@ -34,6 +34,14 @@ All notable changes to this project are documented here. The format is based on
 
 - **`ModelUsage`** giving per-model token, cost, context-window, and provider
   breakdowns for `ResultMessage.ModelUsage`. Ports upstream `9c27ca8`.
+- **`CanUseToolShadowed(opts...)`** reporting the tools for which a
+  `WithCanUseTool` callback will never fire, because a whole-tool
+  `WithAllowedTools` entry (`"Read"`, `"Read()"`, `"Read(*)"`) or
+  `PermissionBypass` auto-approves them first. The callback silently never
+  firing is indistinguishable from it having granted permission. When a
+  `WithStderr` writer is set, the SDK also writes a warning naming the shadowed
+  tools on connect. Advisory only, since shadowing can be intentional. Ports
+  upstream `7968c40`, whose Python `UserWarning` has no Go equivalent.
 - **`ResultMessage.TerminalReason`** reporting why the query loop ended.
   `"aborted_streaming"` / `"aborted_tools"` mean the turn was cancelled, which
   is the only way to tell a cancelled turn from a completed one: an interrupted

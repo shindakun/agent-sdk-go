@@ -18,7 +18,7 @@ control-protocol correlation, and dispatch of in-process callbacks (permissions,
 hooks, and SDK MCP tools).
 
 Verified against **Claude Code CLI 2.1.222** (the version the upstream SDK
-bundles, pinned as `claude.SupportedCLIVersion`) — statically (127/128 public
+bundles, pinned as `claude.SupportedCLIVersion`) — statically (128/128 public
 names, 45/45 options) and behaviorally (an integration suite that runs against
 the real binary). `claude.CheckCLIVersion` reports the installed binary's
 version and whether it matches the pin.
@@ -154,6 +154,37 @@ claude.WithCanUseTool(func(ctx context.Context, tool string, input json.RawMessa
 })
 ```
 
+### Shadowing
+
+A `CanUseTool` callback is only consulted for tool calls that are not already
+approved. Two things auto-approve a call before the callback runs:
+
+- an `WithAllowedTools` entry that allows a **whole tool** (`"Read"`,
+  `"Read()"`, `"Read(*)"`), as opposed to specific invocations
+  (`"Bash(ls:*)"`);
+- `WithPermissionMode(claude.PermissionBypass)`, which approves everything.
+
+The callback then simply never fires for those tools, which looks exactly like
+it having granted permission. When a `WithStderr` writer is set, the SDK writes
+a warning naming the shadowed tools on connect. To check programmatically:
+
+```go
+opts := []claude.Option{
+	claude.WithCanUseTool(cb),
+	claude.WithAllowedTools("Read"),
+}
+if shadowed := claude.CanUseToolShadowed(opts...); len(shadowed) > 0 {
+	log.Printf("CanUseTool will not fire for: %v", shadowed)
+}
+msgs, err := claude.Collect(ctx, prompt, opts...)
+```
+
+Shadowing is sometimes intentional (a callback that only gates tools outside
+`allowedTools`), so it is advisory rather than an error. To gate *every* tool
+call, use a `PreToolUse` hook instead, or narrow the entry so calls fall through
+to the callback. Allow rules in settings files can shadow the callback too, and
+are not visible to this check.
+
 ## Types
 
 The streamed `Message` union: `AssistantMessage`, `UserMessage`, `SystemMessage`,
@@ -223,7 +254,7 @@ See [CLAUDE.md](CLAUDE.md) for the codebase map and the parity workflow.
 ## Parity
 
 Verified name-for-name and field-for-field against
-`claude-agent-sdk-python` (CLI 2.1.222): 127 of 128 public `__all__` names and all 45
+`claude-agent-sdk-python` (CLI 2.1.222): all 128 public `__all__` names and all 45
 `ClaudeAgentOptions` fields covered (a handful of Python-runtime-specific names
 documented N/A), with behavioral checks against the real binary. See
 [PARITY.md](PARITY.md).

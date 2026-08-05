@@ -5,10 +5,9 @@ This maps the Go port name-for-name against the reference
 Parity is **mechanically verified** against a clone of the source at three
 levels — names, fields, and enum values — using AST extraction, not eyeballing:
 
-- Public names (`__all__`): **127/128** accounted for: 123 with a Go
-  equivalent, 4 documented N/A below. `CanUseToolShadowedWarning` is a new
-  upstream addition not yet ported (tracked as an open parity issue).
-  `ResultMessage.terminal_reason` is covered as `TerminalReason`.
+- Public names (`__all__`): **128/128** accounted for: 123 with a Go
+  equivalent, 5 documented N/A below. `ResultMessage.terminal_reason` is
+  covered as `TerminalReason`.
 - `ClaudeAgentOptions` fields: **45/45** covered (2 documented N/A below).
 - **Per-type field sets**: every public dataclass/TypedDict field diffed against
   the Go struct (incl. nested-vs-top-level decode sources).
@@ -65,6 +64,7 @@ Notable wire details verified against the source:
 | `TextBlock`, `ThinkingBlock`, `ToolUseBlock`, `ToolResultBlock`, `ContentBlock` | same |
 | `ServerToolUseBlock`, `ServerToolResultBlock`, `ServerToolName` | same |
 | `DeferredToolUse` | `DeferredToolUse` |
+| `CanUseToolShadowedWarning` | N/A: Go has no `warnings` module. The condition is reported by `CanUseToolShadowed(opts...)` and written to the `WithStderr` writer on connect. |
 | `ModelUsage` | `ModelUsage` (`ResultMessage.ModelUsage`, camelCase wire keys) |
 
 ## Options, tools, MCP, agents

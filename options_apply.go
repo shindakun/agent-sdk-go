@@ -462,6 +462,108 @@ func isSkillNameInvalidRune(r rune) bool {
 	return false
 }
 
+// wholeToolAllowed returns the tool an allowedTools entry allows outright, or
+// "" when the entry only allows matching invocations.
+//
+// Mirrors the CLI's rule parser: an entry allows a whole tool when it has no
+// "(...)" specifier ("Read"), or when the specifier is empty or a lone wildcard
+// ("Read()", "Read(*)"). A real specifier ("Bash(ls:*)") only allows matching
+// invocations. Malformed entries fall back to the whole string as a tool name
+// in the CLI, so they match nothing and are ignored here.
+func wholeToolAllowed(entry string) string {
+	if strings.TrimSpace(entry) == "" {
+		return ""
+	}
+	open := strings.Index(entry, "(")
+	if open == -1 {
+		return entry
+	}
+	if open == 0 || !strings.HasSuffix(entry, ")") {
+		return ""
+	}
+	switch entry[open+1 : len(entry)-1] {
+	case "", "*":
+		return entry[:open]
+	}
+	return ""
+}
+
+// CanUseToolShadowed reports the tools for which a [CanUseTool] callback will
+// never be invoked, because something auto-approves them first.
+//
+// A tool call is auto-approved before the callback is consulted when
+// [WithPermissionMode] is [PermissionBypass], or when an
+// [WithAllowedTools] entry allows a whole tool ("Read", "Read()", "Read(*)")
+// rather than specific invocations ("Bash(ls:*)"). The result is a silent
+// misconfiguration: the callback simply never fires for those tools, which is
+// indistinguishable from it having granted permission.
+//
+// It returns nil when no callback is configured or nothing is shadowed. Under
+// bypassPermissions every tool is shadowed, which is reported as the single
+// entry "*" since the set is not enumerable from the options alone.
+//
+// This is advisory. Shadowing can be intentional, for example a callback used
+// solely for tools outside allowedTools, so it is never an error. The SDK also
+// writes this diagnostic to the [WithStderr] writer when one is set. Allow
+// rules from settings files can shadow the callback too but are not visible
+// here.
+//
+// To gate every tool call regardless, use a PreToolUse hook instead, or narrow
+// the allowedTools entry so calls fall through to the callback.
+//
+// Pass the same options you would pass to [Query], [Collect], or [NewClient]:
+//
+//	shadowed := claude.CanUseToolShadowed(
+//		claude.WithCanUseTool(cb),
+//		claude.WithAllowedTools("Read"),
+//	)
+func CanUseToolShadowed(opts ...Option) []string {
+	return newOptions(opts...).canUseToolShadowed()
+}
+
+func (o *Options) canUseToolShadowed() []string {
+	if o.canUseTool == nil {
+		return nil
+	}
+	if o.permissionMode == PermissionBypass {
+		return []string{"*"}
+	}
+	var shadowed []string
+	seen := map[string]bool{}
+	// Deduped while preserving order: a redundant config such as
+	// ["Read", "Read()"] resolves to the same tool and must not repeat it.
+	for _, entry := range o.allowedTools {
+		tool := wholeToolAllowed(entry)
+		if tool == "" || seen[tool] {
+			continue
+		}
+		seen[tool] = true
+		shadowed = append(shadowed, tool)
+	}
+	return shadowed
+}
+
+// canUseToolShadowedWarning returns the advisory message for these options, or
+// "" when nothing is shadowed.
+func (o *Options) canUseToolShadowedWarning() string {
+	shadowed := o.canUseToolShadowed()
+	if len(shadowed) == 0 {
+		return ""
+	}
+	if o.permissionMode == PermissionBypass {
+		return "claude: warning: CanUseTool will not be invoked: permission mode " +
+			"'bypassPermissions' auto-approves every tool call (except explicit deny " +
+			"rules) before the callback is consulted. To gate every tool call, use a " +
+			"PreToolUse hook instead."
+	}
+	return "claude: warning: CanUseTool will not be invoked for: " +
+		strings.Join(shadowed, ", ") + ". An allowed-tools entry that allows a whole " +
+		"tool auto-approves it before the callback is consulted. To gate every tool " +
+		"call, use a PreToolUse hook; or narrow the entry so calls fall through to " +
+		"CanUseTool. Allow rules from settings files can also shadow the callback but " +
+		"are not visible here."
+}
+
 // cmdExeMetacharacters are the characters cmd.exe treats specially.
 const cmdExeMetacharacters = `&|<>^%!"`
 

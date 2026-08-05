@@ -9,10 +9,12 @@
 package claude
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os/exec"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -385,4 +387,60 @@ func TestIntegrationThinking(t *testing.T) {
 	if result.IsError {
 		t.Errorf("thinking turn errored: %v", result.Errors)
 	}
+}
+
+// TestIntegrationCanUseToolShadowWarning verifies the shadowing advisory
+// against the real CLI: an allowedTools entry that allows a whole tool
+// auto-approves it, so the callback is never consulted, and the SDK warns on
+// the WithStderr writer. This is the failure mode the advisory exists for: a
+// silently dead CanUseTool looks exactly like one that granted permission.
+func TestIntegrationCanUseToolShadowWarning(t *testing.T) {
+	skipIfNoCLI(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	var consulted atomic.Bool
+	cb := func(ctx context.Context, tool string, input json.RawMessage, pc PermissionContext) (PermissionResult, error) {
+		consulted.Store(true)
+		return PermissionAllow{}, nil
+	}
+
+	var stderr lockedBuffer
+	if _, err := Collect(ctx, "Read the file /etc/hostname and report its first line.",
+		WithCanUseTool(cb),
+		WithAllowedTools("Read"),
+		WithStderr(&stderr),
+	); err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+
+	out := stderr.String()
+	if !strings.Contains(out, "CanUseTool will not be invoked for") {
+		t.Errorf("shadow warning missing from stderr; got:\n%s", out)
+	}
+	if !strings.Contains(out, "Read") {
+		t.Errorf("warning does not name the shadowed tool; got:\n%s", out)
+	}
+	if consulted.Load() {
+		t.Error("callback was consulted; expected Read to be auto-approved (the shadowing this warns about)")
+	}
+}
+
+// lockedBuffer is a concurrency-safe io.Writer: the stderr pump writes from a
+// separate goroutine while the test reads.
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }
