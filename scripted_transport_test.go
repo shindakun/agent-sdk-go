@@ -26,6 +26,7 @@ type scriptedTransport struct {
 	writes    [][]byte
 	connected bool
 	scriptOut bool
+	endInputs int
 }
 
 func newScriptedTransport(script ...[]byte) *scriptedTransport {
@@ -107,7 +108,20 @@ func (s *scriptedTransport) flushScript() {
 	s.ch <- transport.RawLine{Err: io.EOF}
 }
 
-func (s *scriptedTransport) EndInput() error { return nil }
+func (s *scriptedTransport) EndInput() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.endInputs++
+	return nil
+}
+
+// endInputCount reports how many times stdin was closed. Used to assert that a
+// result frame arriving with a task in flight does not end input.
+func (s *scriptedTransport) endInputCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.endInputs
+}
 
 func (s *scriptedTransport) Close() error {
 	s.mu.Lock()

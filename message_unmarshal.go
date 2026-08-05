@@ -166,6 +166,16 @@ func decodeSystem(b []byte) (Message, error) {
 		}
 		m.Raw = clone(b)
 		return &m, nil
+	case "task_notification":
+		// The CLI emits this as a system subtype (verified against 2.1.222).
+		// The top-level "type":"task_notification" form is also accepted, in
+		// the main type switch, for forward/backward compatibility.
+		var m TaskNotificationMessage
+		if err := json.Unmarshal(b, &m); err != nil {
+			return nil, &MessageParseError{Type: "system/task_notification", Raw: clone(b), Err: err}
+		}
+		m.Raw = clone(b)
+		return &m, nil
 	case "task_updated":
 		return decodeTaskUpdated(b)
 	case "hook_started", "hook_response":

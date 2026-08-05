@@ -25,6 +25,21 @@ All notable changes to this project are documented here. The format is based on
   `--allowedTools`, whose tokenizer splits on commas and spaces without honoring
   escapes, so a name carrying a delimiter silently widened the rule list. Ports
   upstream `cbed47d`.
+- **One-shot `Query` closed stdin while background tasks were still running.**
+  A result frame ends one *turn*, not the run: a background Task keeps running
+  past it and still needs stdin for hook and SDK MCP control responses. Closing
+  on the first result silently bypassed hooks and failed the subagent's
+  in-process tool calls. `Query` now tracks in-flight tasks from the
+  `task_started` / `task_notification` / terminal `task_updated` lifecycle
+  frames and only closes stdin on a result that arrives with nothing in flight.
+  Reproduced and fixed against the live binary: the background subagent's
+  SDK MCP tool went from never executing to executing normally. Ports upstream
+  `e6e07f1`.
+- **`TaskNotificationMessage` was never delivered.** The CLI emits
+  `task_notification` as a `system` subtype (verified against 2.1.222), but the
+  decoder only handled a top-level `"type":"task_notification"` frame, so real
+  notifications decoded as a generic `SystemMessage`. Both shapes now decode.
+  Found while porting the fix above, whose task ledger depends on this frame.
 - **`ResultMessage.ModelUsage` never populated.** The struct tag read
   `model_usage`, but the CLI emits `modelUsage` (camelCase, passed through
   verbatim), so the field was always empty. It is now typed as
