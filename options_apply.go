@@ -3,8 +3,10 @@ package claude
 import (
 	"encoding/json"
 	"fmt"
+	"runtime"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/shindakun/agent-sdk-go/internal/protocol"
 )
@@ -92,6 +94,9 @@ func (o *Options) buildArgs() ([]string, error) {
 		}
 	}
 	if o.sessionID != "" {
+		if err := rejectWindowsCmdMetacharacters("sessionID", o.sessionID); err != nil {
+			return nil, err
+		}
 		args = append(args, "--session-id="+o.sessionID)
 	}
 	if o.strictMcpConfig {
@@ -128,6 +133,9 @@ func (o *Options) buildArgs() ([]string, error) {
 	// CLI flag instead, letting an untrusted value inject arbitrary flags.
 	// The equals form always binds the value to the flag.
 	if o.resume != "" {
+		if err := rejectWindowsCmdMetacharacters("resume", o.resume); err != nil {
+			return nil, err
+		}
 		args = append(args, "--resume="+o.resume)
 	}
 	if o.forkSession {
@@ -177,9 +185,21 @@ func (o *Options) buildArgs() ([]string, error) {
 		}
 		sort.Strings(keys)
 		for _, k := range keys {
-			args = append(args, "--"+k)
-			if v := o.extraArgs[k]; v != nil {
-				args = append(args, *v)
+			v := o.extraArgs[k]
+			if v == nil {
+				// A valueless flag must stay a bare token: --flag=  would be
+				// an error for flags the CLI declares without a value.
+				args = append(args, "--"+k)
+				continue
+			}
+			// Bind a dash-leading value to its flag so it cannot be parsed as
+			// a separate CLI flag (the same class the --resume equals form
+			// closes). Other values keep the two-token form, which is what
+			// string-driven boolean flags rely on.
+			if strings.HasPrefix(*v, "-") {
+				args = append(args, "--"+k+"="+*v)
+			} else {
+				args = append(args, "--"+k, *v)
 			}
 		}
 	}
@@ -356,6 +376,40 @@ func displayOr(cfg, opt ThinkingDisplay) string {
 		return string(cfg)
 	}
 	return string(opt)
+}
+
+// cmdExeMetacharacters are the characters cmd.exe treats specially.
+const cmdExeMetacharacters = `&|<>^%!"`
+
+// rejectWindowsCmdMetacharacters is defense in depth for Windows. With batch
+// script spawning refused (see the transport's isWindowsBatchCLI), these
+// characters are harmless: Go quotes correctly for native executables. They are
+// rejected anyway so that resume and sessionID values, which applications
+// commonly take from external input, stay inert even if a cmd.exe hop is ever
+// reintroduced between the SDK and the CLI. No format is imposed beyond this
+// (resume values may be arbitrary session titles, not only UUIDs), and POSIX
+// behavior is unchanged.
+func rejectWindowsCmdMetacharacters(optionName, value string) error {
+	if runtime.GOOS != "windows" {
+		return nil
+	}
+	var bad []string
+	seen := map[rune]bool{}
+	for _, r := range value {
+		if seen[r] {
+			continue
+		}
+		if strings.ContainsRune(cmdExeMetacharacters, r) || r == '\r' || r == '\n' {
+			seen[r] = true
+			bad = append(bad, strconv.QuoteRune(r))
+		}
+	}
+	if len(bad) == 0 {
+		return nil
+	}
+	sort.Strings(bad)
+	return fmt.Errorf("%s value %q contains characters that are unsafe to pass on a Windows command line: %s",
+		optionName, value, strings.Join(bad, ", "))
 }
 
 func joinComma(items []string) string {

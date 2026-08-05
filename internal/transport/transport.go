@@ -73,6 +73,21 @@ func (e *CLINotFoundError) Error() string {
 	return "claude CLI not found on PATH: " + e.Hint
 }
 
+// BatchCLIRefusedError reports that the resolved CLI path names a Windows
+// .bat/.cmd script, which the SDK refuses to spawn. See rejectWindowsBatchCLI.
+type BatchCLIRefusedError struct {
+	Path string
+}
+
+func (e *BatchCLIRefusedError) Error() string {
+	return "claude: refusing to execute batch script " + e.Path +
+		": Windows runs .bat/.cmd files via cmd.exe, which can execute commands " +
+		"injected through CLI arguments, and no reliable escaping for cmd.exe " +
+		"exists. Use a native claude executable instead: install Claude Code " +
+		"natively (irm https://claude.ai/install.ps1 | iex), or point " +
+		"WithCLIPath at a claude.exe."
+}
+
 // ProcessError reports a non-zero subprocess exit.
 type ProcessError struct {
 	ExitCode int
