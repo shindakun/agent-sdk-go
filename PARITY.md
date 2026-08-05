@@ -5,8 +5,10 @@ This maps the Go port name-for-name against the reference
 Parity is **mechanically verified** against a clone of the source at three
 levels — names, fields, and enum values — using AST extraction, not eyeballing:
 
-- Public names (`__all__`): **126/126** accounted for — 122 with a Go
-  equivalent, 4 documented N/A below.
+- Public names (`__all__`): **126/128** accounted for: 122 with a Go
+  equivalent, 4 documented N/A below. `ModelUsage` and
+  `CanUseToolShadowedWarning` are new upstream additions not yet ported
+  (tracked as open parity issues).
 - `ClaudeAgentOptions` fields: **45/45** covered (2 documented N/A below).
 - **Per-type field sets**: every public dataclass/TypedDict field diffed against
   the Go struct (incl. nested-vs-top-level decode sources).
@@ -19,7 +21,7 @@ levels — names, fields, and enum values — using AST extraction, not eyeballi
 
 Addresses [claude-agent-sdk-python#498](https://github.com/anthropics/claude-agent-sdk-python/issues/498).
 
-**Verified against Claude Code CLI 2.1.178** — the version the upstream SDK
+**Verified against Claude Code CLI 2.1.222** — the version the upstream SDK
 bundles (`_cli_version.py`), matching the installed binary. In addition to the
 static checks above, an integration suite (`go test -tags integration`) runs the
 **real binary** for: one-shot query, multi-turn client, custom Go tool, CanUseTool

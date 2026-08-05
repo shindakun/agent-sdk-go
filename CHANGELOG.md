@@ -5,6 +5,21 @@ All notable changes to this project are documented here. The format is based on
 
 ## Unreleased
 
+### Re-synced to Claude Code CLI 2.1.222
+
+- Bumped `SupportedCLIVersion` to `2.1.222`, matching upstream's
+  `_cli_version.py`. The 2.1.178 to 2.1.222 range is CLI bumps only on this
+  SDK's surface: `ClaudeAgentOptions` is unchanged at **45/45** fields, and the
+  per-type field sets, literal value sets, and control-protocol shapes all still
+  match. Verified with `gofmt`/`go vet`, unit tests under `-race`, and the full
+  integration suite (8 tests) against the real 2.1.222 binary;
+  `CheckCLIVersion` confirms installed == pinned.
+- Public-name parity is now **126/128**. Upstream added `ModelUsage` and
+  `CanUseToolShadowedWarning` in this range; neither is ported yet, and both are
+  tracked as open parity issues along with `ResultMessage.terminal_reason`.
+  `ResultMessage.ModelUsage` remains a `json.RawMessage` rather than a typed
+  map, so no wire data is lost in the meantime.
+
 ## [v0.2.1] - 2026-06-15
 
 ### Fixed
