@@ -150,7 +150,6 @@ func TestBuildArgsParityFlags(t *testing.T) {
 	}
 	for flag, val := range map[string]string{
 		"--setting-sources":        "user,project",
-		"--resume":                 "sess_7",
 		"--permission-prompt-tool": "mcp__perm__prompt",
 		"--fallback-model":         "haiku",
 		"--max-budget-usd":         "2.5",
@@ -160,9 +159,45 @@ func TestBuildArgsParityFlags(t *testing.T) {
 			t.Errorf("missing %s %s; args=%v", flag, val, args)
 		}
 	}
+	if !argsContainEquals(args, "--resume", "sess_7") {
+		t.Errorf("missing --resume=sess_7; args=%v", args)
+	}
 	// --add-dir appears once per directory.
 	if !argsContainPair(args, "--add-dir", "/a") || !argsContainPair(args, "--add-dir", "/b") {
 		t.Errorf("missing per-dir --add-dir; args=%v", args)
+	}
+}
+
+// TestResumeSessionIDNoFlagInjection pins the argv shape of --resume and
+// --session-id. The CLI declares --resume with an optional value, so in the
+// two-token form a dash-leading value is not bound to the flag and is parsed
+// as an independent flag: `--resume --version` runs --version and yields no
+// messages. Verified against CLI 2.1.222, where `claude --resume --version -p
+// hi` prints the version and exits 0, while `--resume=--version` is rejected.
+func TestResumeSessionIDNoFlagInjection(t *testing.T) {
+	for _, evil := range []string{"--version", "-r", "--settings=/etc/passwd"} {
+		o := newOptions(WithResume(evil), WithSessionID(evil))
+		args, err := o.buildArgs()
+		if err != nil {
+			t.Fatalf("buildArgs: %v", err)
+		}
+		if !argsContainEquals(args, "--resume", evil) {
+			t.Errorf("--resume=%s not a single token; args=%v", evil, args)
+		}
+		if !argsContainEquals(args, "--session-id", evil) {
+			t.Errorf("--session-id=%s not a single token; args=%v", evil, args)
+		}
+		// The value must never appear as a standalone argv token, which is
+		// what would let the CLI parse it as a flag of its own.
+		for _, a := range args {
+			if a == evil {
+				t.Errorf("value %q leaked as a standalone argv token; args=%v", evil, args)
+			}
+		}
+		// The bare flags must not appear either: that is the two-token form.
+		if argsContainsFlag(args, "--resume") || argsContainsFlag(args, "--session-id") {
+			t.Errorf("bare --resume/--session-id token present; args=%v", args)
+		}
 	}
 }
 
@@ -207,6 +242,18 @@ func argsContainsFlag(args []string, flag string) bool {
 func argsContainPair(args []string, flag, val string) bool {
 	for i := 0; i+1 < len(args); i++ {
 		if args[i] == flag && args[i+1] == val {
+			return true
+		}
+	}
+	return false
+}
+
+// argsContainEquals reports whether args carries flag=val as a single token.
+// Flags whose value must bind to the flag (see the --resume note in
+// buildArgs) are emitted this way rather than as two tokens.
+func argsContainEquals(args []string, flag, val string) bool {
+	for _, a := range args {
+		if a == flag+"="+val {
 			return true
 		}
 	}

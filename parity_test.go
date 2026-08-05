@@ -97,7 +97,6 @@ func TestNewParityFlags(t *testing.T) {
 	}
 	checks := map[string]string{
 		"--tools":       "Read,Bash",
-		"--session-id":  "sess-9",
 		"--effort":      "high",
 		"--task-budget": "5000",
 	}
@@ -105,6 +104,9 @@ func TestNewParityFlags(t *testing.T) {
 		if !argsContainPair(args, flag, val) {
 			t.Errorf("missing %s %s; args=%v", flag, val, args)
 		}
+	}
+	if !argsContainEquals(args, "--session-id", "sess-9") {
+		t.Errorf("missing --session-id=sess-9; args=%v", args)
 	}
 	for _, flag := range []string{"--strict-mcp-config", "--include-hook-events"} {
 		if !argsContainsFlag(args, flag) {

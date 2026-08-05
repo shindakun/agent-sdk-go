@@ -92,7 +92,7 @@ func (o *Options) buildArgs() ([]string, error) {
 		}
 	}
 	if o.sessionID != "" {
-		args = append(args, "--session-id", o.sessionID)
+		args = append(args, "--session-id="+o.sessionID)
 	}
 	if o.strictMcpConfig {
 		args = append(args, "--strict-mcp-config")
@@ -122,8 +122,13 @@ func (o *Options) buildArgs() ([]string, error) {
 	if o.permissionMode != "" {
 		args = append(args, "--permission-mode", string(o.permissionMode))
 	}
+	// Pass these as --flag=value rather than as two argv tokens. The CLI
+	// declares --resume with an optional value, so in the two-token form a
+	// dash-leading value is not bound to the flag and is parsed as a separate
+	// CLI flag instead, letting an untrusted value inject arbitrary flags.
+	// The equals form always binds the value to the flag.
 	if o.resume != "" {
-		args = append(args, "--resume", o.resume)
+		args = append(args, "--resume="+o.resume)
 	}
 	if o.forkSession {
 		args = append(args, "--fork-session")
