@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/shindakun/agent-sdk-go/internal/protocol"
 )
@@ -40,7 +41,14 @@ func (o *Options) buildArgs() ([]string, error) {
 
 	// Apply skills defaults: when skills are configured, the CLI needs the
 	// Skill(name) tool(s) in allowedTools and a setting-sources default so it
-	// can discover installed skills (matching the official SDK).
+	// can discover installed skills (matching the official SDK). Names are
+	// validated first: they are formatted into --allowedTools, whose tokenizer
+	// would silently mis-split a name carrying a delimiter.
+	for _, name := range o.skills {
+		if err := validateSkillName(name); err != nil {
+			return nil, err
+		}
+	}
 	allowed, settingSources := o.effectiveSkillsDefaults()
 	if len(allowed) > 0 {
 		args = append(args, "--allowedTools", joinComma(allowed))
@@ -376,6 +384,82 @@ func displayOr(cfg, opt ThinkingDisplay) string {
 		return string(cfg)
 	}
 	return string(opt)
+}
+
+// validateSkillName rejects skill names that cannot ride safely in a
+// Skill(name) rule.
+//
+// Names from WithSkills are formatted into the --allowedTools value, which the
+// CLI splits into rules on commas and spaces outside parentheses. That
+// tokenizer does not honor escape sequences (escaping exists only in the
+// per-rule grammar, applied after splitting), so a name carrying a delimiter
+// cannot be passed through reliably: what it tokenizes into depends on what
+// surrounds it.
+//
+// Names that tokenize cleanly but can never match the listed skill are
+// rejected too, so a dead rule fails loudly here instead of silently granting
+// nothing. Each check states its own reason.
+//
+// Upstream also guards against a bare string being passed where a list is
+// expected; that is unreachable here, since WithSkills is variadic over string.
+// Its unpaired-surrogate check becomes a UTF-8 validity check: a Go string is a
+// byte slice that may hold arbitrary bytes, and an invalid encoding can never
+// match a name the CLI discovered.
+func validateSkillName(name string) error {
+	if strings.TrimSpace(name) == "" {
+		return fmt.Errorf("invalid skill name %q: skill names must be non-empty", name)
+	}
+	if name != strings.TrimSpace(name) {
+		return fmt.Errorf("invalid skill name %q: leading or trailing whitespace can never match, "+
+			"since the Skill tool trims the invoked name", name)
+	}
+	if !utf8.ValidString(name) {
+		return fmt.Errorf("invalid skill name %q: contains invalid UTF-8, "+
+			"which can never match a skill the CLI discovered", name)
+	}
+	if i := strings.IndexFunc(name, isSkillNameInvalidRune); i >= 0 {
+		return fmt.Errorf("invalid skill name %q: parentheses, commas, control characters, and "+
+			"byte-order marks are not allowed. Names match the skill's directory name, or "+
+			"'plugin:skill' for plugin-qualified skills", name)
+	}
+	if name == "*" {
+		return fmt.Errorf(`invalid skill name "*": enable every skill by leaving WithSkills unset`)
+	}
+	if strings.HasSuffix(name, ":*") || strings.HasSuffix(name, " *") {
+		return fmt.Errorf("invalid skill name %q: wildcard-suffix names are not allowed; "+
+			"list each skill by its exact name", name)
+	}
+	if strings.HasPrefix(name, "/") {
+		return fmt.Errorf("invalid skill name %q: skill names may not start with '/'. "+
+			"WithSkills takes the canonical name, not the slash-command form", name)
+	}
+	if strings.Contains(name, `\\`) {
+		return fmt.Errorf("invalid skill name %q: consecutive backslashes are not allowed, "+
+			"since the per-rule parser collapses them and the rule would name a different skill", name)
+	}
+	if strings.HasSuffix(name, `\`) {
+		return fmt.Errorf("invalid skill name %q: names may not end with an unpaired backslash", name)
+	}
+	return nil
+}
+
+// isSkillNameInvalidRune reports whether r may not appear in a skill name.
+// Parentheses and commas are delimiters to the --allowedTools tokenizer;
+// control characters (C0, DEL, C1) never appear in a skill directory name.
+// U+FEFF is included because the CLI trims it as whitespace while
+// strings.TrimSpace does not.
+func isSkillNameInvalidRune(r rune) bool {
+	switch {
+	case r == '(' || r == ')' || r == ',':
+		return true
+	case r < 0x20 || r == 0x7f:
+		return true
+	case r >= 0x80 && r <= 0x9f:
+		return true
+	case r == 0xfeff:
+		return true
+	}
+	return false
 }
 
 // cmdExeMetacharacters are the characters cmd.exe treats specially.
