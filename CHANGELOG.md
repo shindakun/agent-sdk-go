@@ -5,6 +5,36 @@ All notable changes to this project are documented here. The format is based on
 
 ## Unreleased
 
+### Fixed
+
+- **Argv flag injection via `WithResume` / `WithSessionID`.** The CLI declares
+  `--resume` with an optional value, so in the two-token form a dash-leading
+  value was parsed as an independent flag rather than bound to `--resume`.
+  `WithResume("--version")` silently ran `claude --version` and yielded no
+  messages (reproduced against CLI 2.1.222). Both flags now use the
+  `--flag=value` form. Ports upstream `347a1cb`.
+- **Windows `.bat`/`.cmd` CLI scripts are refused.** `exec.LookPath` can resolve
+  npm's `claude.cmd` shim via PATHEXT, and Windows runs batch files through
+  `cmd.exe`, which re-parses the command line; `os/exec` documents cmd.exe (and
+  thus all batch files) as an exception to its quoting. Spawning one is now
+  refused with a `*BatchCLIRefusedError`. `resume`/`sessionID` additionally
+  reject cmd.exe metacharacters and CR/LF on Windows, and `WithExtraArgs` binds
+  dash-leading values with `=`. POSIX behavior is unchanged. Ports upstream
+  `879e920` (CVE-2024-27980 class).
+- **Skill names are validated.** Names are formatted into `Skill(name)` rules in
+  `--allowedTools`, whose tokenizer splits on commas and spaces without honoring
+  escapes, so a name carrying a delimiter silently widened the rule list. Ports
+  upstream `cbed47d`.
+- **`ResultMessage.ModelUsage` never populated.** The struct tag read
+  `model_usage`, but the CLI emits `modelUsage` (camelCase, passed through
+  verbatim), so the field was always empty. It is now typed as
+  `map[string]ModelUsage` and decodes; verified against a live result frame.
+
+### Added
+
+- **`ModelUsage`** giving per-model token, cost, context-window, and provider
+  breakdowns for `ResultMessage.ModelUsage`. Ports upstream `9c27ca8`.
+
 ## [v0.2.2] - 2026-08-04
 
 ### Re-synced to Claude Code CLI 2.1.222

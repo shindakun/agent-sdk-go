@@ -67,6 +67,33 @@ type SystemMessage struct {
 
 func (*SystemMessage) isMessage() {}
 
+// ModelUsage reports per-model token usage and cost, keyed in
+// [ResultMessage.ModelUsage] by the raw model string the CLI billed.
+//
+// The JSON keys here are camelCase, unlike the snake_case used elsewhere in the
+// stream: the CLI passes its modelUsage value through verbatim. Verified
+// against a live result frame from CLI 2.1.222.
+type ModelUsage struct {
+	InputTokens              int     `json:"inputTokens"`
+	OutputTokens             int     `json:"outputTokens"`
+	CacheReadInputTokens     int     `json:"cacheReadInputTokens"`
+	CacheCreationInputTokens int     `json:"cacheCreationInputTokens"`
+	WebSearchRequests        int     `json:"webSearchRequests"`
+	CostUSD                  float64 `json:"costUSD"`
+	ContextWindow            int     `json:"contextWindow"`
+	MaxOutputTokens          int     `json:"maxOutputTokens"`
+
+	// CanonicalModel is the model id used for the pricing lookup (for example
+	// "claude-opus-5"). It may differ from the raw model string this entry is
+	// keyed by, which can carry provider-specific ids or aliases.
+	CanonicalModel string `json:"canonicalModel,omitempty"`
+
+	// Provider is the API provider that served this model ("firstParty",
+	// "bedrock", "vertex", "foundry", "anthropicAws", "anthropicGoogleCloud",
+	// "mantle", "gateway").
+	Provider string `json:"provider,omitempty"`
+}
+
 // Usage reports token usage for a turn or result.
 type Usage struct {
 	InputTokens              int `json:"input_tokens"`
@@ -77,23 +104,23 @@ type Usage struct {
 
 // ResultMessage terminates a turn, summarizing cost, duration, and outcome.
 type ResultMessage struct {
-	Subtype           string           `json:"subtype"`
-	IsError           bool             `json:"is_error"`
-	Errors            []string         `json:"errors,omitempty"`
-	DurationMs        int              `json:"duration_ms"`
-	DurationAPIMs     int              `json:"duration_api_ms,omitempty"`
-	NumTurns          int              `json:"num_turns"`
-	StopReason        string           `json:"stop_reason,omitempty"`
-	TotalCostUSD      float64          `json:"total_cost_usd,omitempty"`
-	Usage             Usage            `json:"usage"`
-	ModelUsage        json.RawMessage  `json:"model_usage,omitempty"`
-	Result            string           `json:"result,omitempty"`
-	StructuredOutput  json.RawMessage  `json:"structured_output,omitempty"`
-	PermissionDenials json.RawMessage  `json:"permission_denials,omitempty"`
-	DeferredToolUse   *DeferredToolUse `json:"deferred_tool_use,omitempty"`
-	APIErrorStatus    *int             `json:"api_error_status,omitempty"`
-	SessionID         string           `json:"session_id"`
-	UUID              string           `json:"uuid,omitempty"`
+	Subtype           string                `json:"subtype"`
+	IsError           bool                  `json:"is_error"`
+	Errors            []string              `json:"errors,omitempty"`
+	DurationMs        int                   `json:"duration_ms"`
+	DurationAPIMs     int                   `json:"duration_api_ms,omitempty"`
+	NumTurns          int                   `json:"num_turns"`
+	StopReason        string                `json:"stop_reason,omitempty"`
+	TotalCostUSD      float64               `json:"total_cost_usd,omitempty"`
+	Usage             Usage                 `json:"usage"`
+	ModelUsage        map[string]ModelUsage `json:"modelUsage,omitempty"`
+	Result            string                `json:"result,omitempty"`
+	StructuredOutput  json.RawMessage       `json:"structured_output,omitempty"`
+	PermissionDenials json.RawMessage       `json:"permission_denials,omitempty"`
+	DeferredToolUse   *DeferredToolUse      `json:"deferred_tool_use,omitempty"`
+	APIErrorStatus    *int                  `json:"api_error_status,omitempty"`
+	SessionID         string                `json:"session_id"`
+	UUID              string                `json:"uuid,omitempty"`
 	Raw               json.RawMessage
 }
 
