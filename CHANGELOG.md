@@ -5,6 +5,13 @@ All notable changes to this project are documented here. The format is based on
 
 ## Unreleased
 
+### Changed
+
+- **Breaking: `ResultMessage.ModelUsage` is now `map[string]ModelUsage`** rather
+  than `json.RawMessage`. Code that referenced the field needs updating, though
+  no code could have depended on its *contents*: the struct tag did not match
+  the CLI's wire key, so the field was always empty (see Fixed below).
+
 ### Fixed
 
 - **Argv flag injection via `WithResume` / `WithSessionID`.** The CLI declares
