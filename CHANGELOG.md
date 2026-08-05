@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format is based on
 
 ## Unreleased
 
+## [v0.2.2] - 2026-08-04
+
 ### Re-synced to Claude Code CLI 2.1.222
 
 - Bumped `SupportedCLIVersion` to `2.1.222`, matching upstream's
