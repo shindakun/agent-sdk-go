@@ -103,6 +103,13 @@ type Usage struct {
 }
 
 // ResultMessage terminates a turn, summarizing cost, duration, and outcome.
+//
+// TerminalReason reports why the query loop ended. "aborted_streaming" or
+// "aborted_tools" mean the turn was cancelled (via [Client.Interrupt] or an
+// interrupt control request), which is how a cancelled turn is told apart from
+// one that ran to completion. It is empty when the CLI reported no terminal
+// reason: older CLI versions, or a result that bypassed the query loop such as
+// a local slash command.
 type ResultMessage struct {
 	Subtype           string                `json:"subtype"`
 	IsError           bool                  `json:"is_error"`
@@ -111,6 +118,7 @@ type ResultMessage struct {
 	DurationAPIMs     int                   `json:"duration_api_ms,omitempty"`
 	NumTurns          int                   `json:"num_turns"`
 	StopReason        string                `json:"stop_reason,omitempty"`
+	TerminalReason    string                `json:"terminal_reason,omitempty"`
 	TotalCostUSD      float64               `json:"total_cost_usd,omitempty"`
 	Usage             Usage                 `json:"usage"`
 	ModelUsage        map[string]ModelUsage `json:"modelUsage,omitempty"`

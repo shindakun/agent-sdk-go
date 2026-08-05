@@ -8,6 +8,7 @@ levels — names, fields, and enum values — using AST extraction, not eyeballi
 - Public names (`__all__`): **127/128** accounted for: 123 with a Go
   equivalent, 4 documented N/A below. `CanUseToolShadowedWarning` is a new
   upstream addition not yet ported (tracked as an open parity issue).
+  `ResultMessage.terminal_reason` is covered as `TerminalReason`.
 - `ClaudeAgentOptions` fields: **45/45** covered (2 documented N/A below).
 - **Per-type field sets**: every public dataclass/TypedDict field diffed against
   the Go struct (incl. nested-vs-top-level decode sources).

@@ -34,6 +34,11 @@ All notable changes to this project are documented here. The format is based on
 
 - **`ModelUsage`** giving per-model token, cost, context-window, and provider
   breakdowns for `ResultMessage.ModelUsage`. Ports upstream `9c27ca8`.
+- **`ResultMessage.TerminalReason`** reporting why the query loop ended.
+  `"aborted_streaming"` / `"aborted_tools"` mean the turn was cancelled, which
+  is the only way to tell a cancelled turn from a completed one: an interrupted
+  turn reports `TerminalReason: "aborted_streaming"` with an empty `StopReason`
+  (verified live against CLI 2.1.222). Ports upstream `07b46c6`.
 
 ## [v0.2.2] - 2026-08-04
 

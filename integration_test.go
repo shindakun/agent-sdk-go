@@ -348,6 +348,13 @@ func TestIntegrationInterrupt(t *testing.T) {
 	case rm := <-got:
 		if rm == nil {
 			t.Error("stream ended without a result after interrupt")
+			break
+		}
+		// A cancelled turn is distinguishable only via TerminalReason: the CLI
+		// reports aborted_streaming/aborted_tools here while stop_reason is
+		// empty. Verified live against 2.1.222.
+		if !strings.HasPrefix(rm.TerminalReason, "aborted") {
+			t.Errorf("TerminalReason = %q, want an aborted_* reason after interrupt", rm.TerminalReason)
 		}
 	case <-time.After(30 * time.Second):
 		t.Error("no result within 30s after interrupt — likely hung")
