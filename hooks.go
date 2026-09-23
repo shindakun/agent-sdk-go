@@ -39,16 +39,23 @@ type HookMatcher struct {
 // HookOutput is returned by a [HookCallback] to influence agent behavior. A zero
 // value is a no-op that lets execution proceed.
 type HookOutput struct {
-	// Decision, when set (for example "block"), affects whether the action
-	// proceeds.
+	// Decision, when set to "block", blocks the action.
 	Decision string
-	// SystemMessage is injected into the conversation as a system note.
+	// SystemMessage is a warning shown to the user.
 	SystemMessage string
+	// Reason is feedback for Claude about the decision.
+	Reason string
 	// Continue, when non-nil and false, halts the agent.
 	Continue *bool
+	// StopReason is the message shown when Continue is false.
+	StopReason string
 	// SuppressOutput hides the hook's stdout from the transcript.
 	SuppressOutput bool
 	// HookSpecificOutput carries event-specific structured output, such as a
-	// PreToolUse permission decision.
+	// [PreToolUseHookSpecificOutput] permission decision.
 	HookSpecificOutput json.RawMessage
+	// Async defers the hook: the CLI continues without waiting for it.
+	// AsyncTimeout bounds the deferred run, in milliseconds.
+	Async        bool
+	AsyncTimeout int
 }

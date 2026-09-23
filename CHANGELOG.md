@@ -68,6 +68,21 @@ All notable changes to this project are documented here. The format is based on
   upstream `2bbdce6`.
 - **`ImageBlock`** for image content in in-process tool results, and `Bool`
   for the optional `ToolAnnotations` hints.
+- **Streamed-message prompts:** `QueryMessages` and `Client.QueryMessages` /
+  `QueryMessagesSession` send user message frames, as upstream's `query()` and
+  `client.query()` accept an async iterable. A frame can carry content blocks
+  (images, documents) or an `origin`, which a string prompt cannot.
+- **Hook outputs:** `HookOutput` gains `Reason`, `StopReason`, `Async`, and
+  `AsyncTimeout`, and typed `PreToolUseHookSpecificOutput`,
+  `PostToolUseHookSpecificOutput` (with `UpdatedToolOutput` and
+  `UpdatedMCPToolOutput`), `UserPromptSubmitHookSpecificOutput`, and
+  `SessionStartHookSpecificOutput` join the existing ones.
+- **`WithAllSkills`**, and `WithSkills()` with no names suppresses every
+  skill, matching upstream's `skills="all"` and `skills=[]`. Before, an empty
+  `WithSkills()` behaved as unset (verified against the CLI: unset lists every
+  skill, the empty form none).
+- Constants for `PermissionUpdateDestination`, `McpServerConnectionStatus`,
+  and `AssistantMessageError`, and a `PermissionRuleValue` type.
 
 ### Changed
 
@@ -90,6 +105,15 @@ All notable changes to this project are documented here. The format is based on
   - `SessionSummaryEntry` no longer has a `Summary` field; the summary is
     derived when listing, with upstream's title, last-prompt, and summary
     precedence.
+- **Supported CLI version is 2.1.280** (was 2.1.222), matching upstream's
+  bundled CLI. The integration and e2e suites pass against it.
+- **Breaking: typed fields.** `AssistantMessage.Error` is an
+  `AssistantMessageError` (the string the CLI sends) instead of raw JSON;
+  `McpServerStatusInfo.Status` is a `McpServerConnectionStatus`;
+  `PermissionUpdate.Destination` is a `PermissionUpdateDestination`.
+  `AgentDefinition.Background` is a `*bool` so `false` is sent, `Effort`
+  accepts an `EffortLevel` or an integer, and `MCPServers` accepts inline
+  configs as well as names, as upstream's `AgentDefinition` does.
 - **Breaking: `ToolAnnotations` is MCP's tool annotation type** (`Title`,
   `ReadOnlyHint`, `DestructiveHint`, `IdempotentHint`, `OpenWorldHint`, and
   `MaxResultSizeChars`) instead of an alias of `McpToolAnnotations`, the

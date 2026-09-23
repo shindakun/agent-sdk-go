@@ -17,10 +17,10 @@ and context management; this SDK owns process lifecycle, framing,
 control-protocol correlation, and dispatch of in-process callbacks (permissions,
 hooks, and SDK MCP tools).
 
-Verified against **Claude Code CLI 2.1.222** (the version the upstream SDK
-bundles, pinned as `claude.SupportedCLIVersion`) — statically (128/128 public
-names, 45/45 options) and behaviorally (an integration suite that runs against
-the real binary). `claude.CheckCLIVersion` reports the installed binary's
+Verified against **Claude Code CLI 2.1.280** (the version the upstream SDK
+bundles, pinned as `claude.SupportedCLIVersion`), statically (133/133 public
+names, 49/49 options) and behaviorally (integration and e2e suites that run
+against the real binary). `claude.CheckCLIVersion` reports the installed binary's
 version and whether it matches the pin.
 
 ## Installation
@@ -84,7 +84,9 @@ for msg, err := range claude.Query(ctx, "Find and fix the bug in auth.go",
 ```
 
 `claude.Collect(ctx, prompt, opts...)` gathers all messages into a slice for
-callers that don't need streaming.
+callers that don't need streaming. To send content a string cannot hold, such
+as images, pass user message frames to `claude.QueryMessages` (or
+`Client.QueryMessages`).
 
 ## Interactive sessions: `Client`
 
@@ -284,7 +286,7 @@ See [CLAUDE.md](CLAUDE.md) for the codebase map and the parity workflow.
 ## Parity
 
 Verified name-for-name and field-for-field against
-`claude-agent-sdk-python` (CLI 2.1.222): all 128 public `__all__` names and all 45
+`claude-agent-sdk-python` (CLI 2.1.280): all 133 public `__all__` names and all 49
 `ClaudeAgentOptions` fields covered (a handful of Python-runtime-specific names
 documented N/A), with behavioral checks against the real binary. See
 [PARITY.md](PARITY.md).

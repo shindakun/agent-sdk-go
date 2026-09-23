@@ -134,6 +134,30 @@ func (c *Client) QuerySession(ctx context.Context, prompt, sessionID string) err
 	return sess.sendPromptSession(ctx, prompt, sessionID)
 }
 
+// QueryMessages streams user messages to the CLI, the counterpart of passing an
+// async iterable to the official client.query. Each message is a stream-json
+// user frame, such as
+//
+//	{"type": "user", "message": {"role": "user", "content": [...]}, "parent_tool_use_id": nil}
+//
+// which can carry content blocks (images, documents) or an "origin" that a
+// string prompt cannot. A message without session_id is sent to the "default"
+// session. The caller's maps are not modified.
+func (c *Client) QueryMessages(ctx context.Context, msgs iter.Seq[map[string]any]) error {
+	return c.QueryMessagesSession(ctx, msgs, "")
+}
+
+// QueryMessagesSession is [Client.QueryMessages] with a session id for
+// messages that do not set one.
+func (c *Client) QueryMessagesSession(ctx context.Context, msgs iter.Seq[map[string]any], sessionID string) error {
+	sess, err := c.session()
+	if err != nil {
+		return err
+	}
+	_, err = sess.sendMessages(ctx, msgs, sessionID)
+	return err
+}
+
 // Receive returns the channel of streamed results. The channel is closed when
 // the session ends.
 func (c *Client) Receive() <-chan Result {

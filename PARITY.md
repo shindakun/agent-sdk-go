@@ -5,29 +5,35 @@ This maps the Go port name-for-name against the reference
 Parity is **mechanically verified** against a clone of the source at three
 levels — names, fields, and enum values — using AST extraction, not eyeballing:
 
-- Public names (`__all__`): **128/128** accounted for: 123 with a Go
-  equivalent, 5 documented N/A below. `ResultMessage.terminal_reason` is
-  covered as `TerminalReason`.
-- `ClaudeAgentOptions` fields: **45/45** covered (2 documented N/A below).
+- Public names (`__all__`): **133/133** accounted for: 127 with a Go
+  equivalent, 6 documented N/A below.
+- `ClaudeAgentOptions` fields: **49/49** covered (`debug_stderr` N/A below).
+  `output_format`'s JSON schema is `WithJSONSchema`; `thinking` is
+  `WithThinkingConfig`.
 - **Per-type field sets**: every public dataclass/TypedDict field diffed against
-  the Go struct (incl. nested-vs-top-level decode sources).
-- **Literal value sets**: `PermissionMode` (6), `HookEvent` (10),
-  `SessionStoreFlushMode` (batched/eager), `RateLimitType`/`Status`,
-  `TaskNotificationStatus`, `ServerToolName`, `ThinkingDisplay`, etc.
+  the Go struct (incl. nested-vs-top-level decode sources). Control-protocol
+  TypedDicts (`SDKControl*`) map to internal request types; system-prompt and
+  tools-preset dicts map to options.
+- **Literal value sets**: all 18 `Literal` aliases in `types.py` have their
+  values as Go constants: `PermissionMode` (6), `HookEvent` (10),
+  `EffortLevel`, `SettingSource`, `SdkBeta`, `PermissionUpdateDestination`,
+  `PermissionBehavior`, `McpServerConnectionStatus`, `ServerToolName`,
+  `AssistantMessageError`, `MessageOriginKind`, `TaskNotificationOriginSubkind`,
+  `TaskNotificationStatus`, `TaskUpdatedStatus`, `RateLimitStatus`,
+  `RateLimitType`, `SessionStoreFlushMode`, `ThinkingDisplay`.
 - **Inbound control-request fields**: `can_use_tool` delivers the full
   `ToolPermissionContext` (agent_id, blocked_path, decision_reason, title,
   display_name, description), `hook_callback`, `mcp_message`.
 
 Addresses [claude-agent-sdk-python#498](https://github.com/anthropics/claude-agent-sdk-python/issues/498).
 
-**Verified against Claude Code CLI 2.1.222** — the version the upstream SDK
+**Verified against Claude Code CLI 2.1.280**, the version the upstream SDK
 bundles (`_cli_version.py`), matching the installed binary. In addition to the
-static checks above, an integration suite (`go test -tags integration`) runs the
-**real binary** for: one-shot query, multi-turn client, custom Go tool, CanUseTool
-deny, PreToolUse hook, session resume, interrupt, and adaptive thinking. Static
-parity is necessary but not sufficient — two behavioral bugs (a one-shot stdin
-hang and a dead `CanUseTool`) were caught only by running the binary, plus a
-`--thinking` value bug caught by re-checking against 2.1.159.
+static checks above, the integration and e2e suites run the **real binary**; the
+e2e suite ports every file in upstream's `e2e-tests/` (table below). Static
+parity is necessary but not sufficient: several bugs (a one-shot stdin hang, a
+dead `CanUseTool`, unread tool annotations, subagent transcripts not found)
+showed up only against the binary.
 
 Notable wire details verified against the source:
 
@@ -60,8 +66,9 @@ Notable wire details verified against the source:
 
 | Python | Go |
 | --- | --- |
-| `query` | `Query`, `Collect` |
-| `ClaudeSDKClient` | `Client` |
+| `query` (string prompt / async-iterable prompt) | `Query`, `Collect` / `QueryMessages` |
+| `ClaudeSDKClient` (`query` with a string / async iterable) | `Client` (`Query` / `QueryMessages`) |
+| `__version__` | `Version` |
 | `ClaudeAgentOptions` | `Options` + `With*` |
 | `Transport` | `internal/transport.Transport` (internal) |
 | `create_sdk_mcp_server`, `tool`, `SdkMcpTool` | `NewSdkMcpServer`, `NewTool[T]`, `Tool` |
@@ -190,7 +197,6 @@ init `SystemMessage.Plugins` list.
 
 Public names exported by Python but intentionally absent in Go, with the reason:
 
-- `__version__` → exported as `Version`.
 - `Transport` → the transport is an internal abstraction
   (`internal/transport.Transport`); the public API is `Query`/`Client`.
 - `HookContext` → a TypedDict whose only field, `signal`, is reserved
@@ -199,6 +205,10 @@ Public names exported by Python but intentionally absent in Go, with the reason:
   carrier, so a separate type carries no information today.
 - `McpServerStatusConfig` → an output-only union (the type of
   `McpServerStatus.config`); folded into `McpServerStatusInfo.Config` (raw JSON).
+- `HookInput` → the union of hook input types; a `HookCallback` receives the
+  raw input and decodes it with the `Decode*` helpers.
+- `CanUseToolShadowedWarning` → Python's warnings category; see
+  `CanUseToolShadowed` above.
 - `ClaudeSDKError` → Python's base exception; Go uses concrete typed errors and
   `errors.Is`/`errors.As` (every concrete error in `_errors.py` has a Go
   equivalent).
@@ -210,7 +220,6 @@ here) — emitted as a `*HookEventMessage` for `system`/`hook_started`/
 Options exported by Python but N/A in Go:
 
 - `debug_stderr` → Go uses `WithStderr(io.Writer)`.
-- `output_format` → always `stream-json` (the SDK transport requires it).
 
 Trio / IPython streaming **examples** are Python-async-runtime specific; Go uses
 goroutines and `context.Context`, covered by the `interactive` example.

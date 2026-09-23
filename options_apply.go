@@ -240,10 +240,15 @@ func (o *Options) effectiveSkillsDefaults() (allowed, settingSources []string) {
 		settingSources = append([]string{}, o.settingSources...)
 	}
 
-	if len(o.skills) == 0 {
+	if o.skills == nil && !o.allSkills {
 		return allowed, settingSources
 	}
 
+	if o.allSkills {
+		if !contains(allowed, "Skill") {
+			allowed = append(allowed, "Skill")
+		}
+	}
 	for _, name := range o.skills {
 		pattern := "Skill(" + name + ")"
 		if !contains(allowed, pattern) {
@@ -314,7 +319,8 @@ func (o *Options) buildInitializeRequest(reg *callbackRegistry) (protocol.Initia
 		}
 		req.Agents = b
 	}
-	if len(o.skills) > 0 {
+	// A list, even an empty one, is the skill filter; "all" sends none.
+	if o.skills != nil {
 		b, err := json.Marshal(o.skills)
 		if err != nil {
 			return req, err

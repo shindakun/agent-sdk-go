@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"iter"
 	"os"
 	"strconv"
 	"sync"
@@ -222,6 +223,38 @@ func (s *session) sendPromptSession(ctx context.Context, prompt, sessionID strin
 		return err
 	}
 	return s.t.Write(ctx, b)
+}
+
+// sendMessages writes each streamed message as a stream-json line: a copy of
+// the caller's map with session_id filled in when absent (the given id, else
+// "default") and client_composed set when verbatim prompts are on. It returns
+// how many were written.
+func (s *session) sendMessages(ctx context.Context, msgs iter.Seq[map[string]any], sessionID string) (int, error) {
+	if sessionID == "" {
+		sessionID = "default"
+	}
+	n := 0
+	for msg := range msgs {
+		out := make(map[string]any, len(msg)+1)
+		for k, v := range msg {
+			out[k] = v
+		}
+		if _, ok := out["session_id"]; !ok {
+			out["session_id"] = sessionID
+		}
+		if s.opts.verbatimPrompts {
+			out["client_composed"] = true
+		}
+		b, err := json.Marshal(out)
+		if err != nil {
+			return n, err
+		}
+		if err := s.t.Write(ctx, b); err != nil {
+			return n, err
+		}
+		n++
+	}
+	return n, nil
 }
 
 // engineRef exposes the protocol engine for control methods.

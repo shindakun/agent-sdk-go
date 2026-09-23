@@ -101,6 +101,40 @@ type PostToolUseFailureHookInput struct {
 
 // Hook-specific outputs are typed payloads for HookOutput.HookSpecificOutput.
 
+// PreToolUseHookSpecificOutput is the typed hook-specific output for
+// PreToolUse events. PermissionDecision is "allow", "deny", "ask", or "defer".
+type PreToolUseHookSpecificOutput struct {
+	HookEventName            string          `json:"hookEventName"` // "PreToolUse"
+	PermissionDecision       string          `json:"permissionDecision,omitempty"`
+	PermissionDecisionReason string          `json:"permissionDecisionReason,omitempty"`
+	UpdatedInput             json.RawMessage `json:"updatedInput,omitempty"`
+	AdditionalContext        string          `json:"additionalContext,omitempty"`
+}
+
+// PostToolUseHookSpecificOutput is the typed hook-specific output for
+// PostToolUse events. UpdatedToolOutput replaces a built-in tool's output and
+// UpdatedMCPToolOutput an MCP tool's.
+type PostToolUseHookSpecificOutput struct {
+	HookEventName        string          `json:"hookEventName"` // "PostToolUse"
+	AdditionalContext    string          `json:"additionalContext,omitempty"`
+	UpdatedToolOutput    json.RawMessage `json:"updatedToolOutput,omitempty"`
+	UpdatedMCPToolOutput json.RawMessage `json:"updatedMCPToolOutput,omitempty"`
+}
+
+// UserPromptSubmitHookSpecificOutput is the typed hook-specific output for
+// UserPromptSubmit events.
+type UserPromptSubmitHookSpecificOutput struct {
+	HookEventName     string `json:"hookEventName"` // "UserPromptSubmit"
+	AdditionalContext string `json:"additionalContext,omitempty"`
+}
+
+// SessionStartHookSpecificOutput is the typed hook-specific output for
+// SessionStart events.
+type SessionStartHookSpecificOutput struct {
+	HookEventName     string `json:"hookEventName"` // "SessionStart"
+	AdditionalContext string `json:"additionalContext,omitempty"`
+}
+
 // NotificationHookSpecificOutput is the typed hook-specific output for
 // Notification events.
 type NotificationHookSpecificOutput struct {

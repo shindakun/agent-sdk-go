@@ -43,12 +43,17 @@ type AgentDefinition struct {
 	Model           string   `json:"model,omitempty"`
 	Skills          []string `json:"skills,omitempty"`
 	Memory          string   `json:"memory,omitempty"` // "user" | "project" | "local"
-	MCPServers      []string `json:"mcpServers,omitempty"`
-	InitialPrompt   string   `json:"initialPrompt,omitempty"`
-	MaxTurns        int      `json:"maxTurns,omitempty"`
-	Background      bool     `json:"background,omitempty"`
-	Effort          string   `json:"effort,omitempty"`
-	PermissionMode  string   `json:"permissionMode,omitempty"`
+	// MCPServers entries are server names (string) or inline configs
+	// (map[string]any of name to config).
+	MCPServers    []any  `json:"mcpServers,omitempty"`
+	InitialPrompt string `json:"initialPrompt,omitempty"`
+	MaxTurns      int    `json:"maxTurns,omitempty"`
+	// Background, when set, runs the agent in the background (true) or the
+	// foreground (false); nil leaves the choice to the model.
+	Background *bool `json:"background,omitempty"`
+	// Effort is an [EffortLevel] or an integer.
+	Effort         any    `json:"effort,omitempty"`
+	PermissionMode string `json:"permissionMode,omitempty"`
 }
 
 // SettingSource names a filesystem settings source the CLI may load.

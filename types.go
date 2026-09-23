@@ -224,6 +224,14 @@ type ContextUsageResponse struct {
 // McpServerConnectionStatus is an MCP server's connection state.
 type McpServerConnectionStatus string
 
+const (
+	McpConnected McpServerConnectionStatus = "connected"
+	McpFailed    McpServerConnectionStatus = "failed"
+	McpNeedsAuth McpServerConnectionStatus = "needs-auth"
+	McpPending   McpServerConnectionStatus = "pending"
+	McpDisabled  McpServerConnectionStatus = "disabled"
+)
+
 // McpServerInfo is an MCP server's reported identity.
 type McpServerInfo struct {
 	Name    string `json:"name"`
@@ -270,13 +278,13 @@ type McpToolInfo struct {
 // calls this McpServerStatus; that name is used here for the control-method
 // return type, so the typed status carries the "Info" suffix).
 type McpServerStatusInfo struct {
-	Name       string          `json:"name"`
-	Status     string          `json:"status"`
-	ServerInfo *McpServerInfo  `json:"serverInfo,omitempty"`
-	Error      string          `json:"error,omitempty"`
-	Scope      string          `json:"scope,omitempty"`
-	Tools      []McpToolInfo   `json:"tools,omitempty"`
-	Config     json.RawMessage `json:"config,omitempty"`
+	Name       string                    `json:"name"`
+	Status     McpServerConnectionStatus `json:"status"`
+	ServerInfo *McpServerInfo            `json:"serverInfo,omitempty"`
+	Error      string                    `json:"error,omitempty"`
+	Scope      string                    `json:"scope,omitempty"`
+	Tools      []McpToolInfo             `json:"tools,omitempty"`
+	Config     json.RawMessage           `json:"config,omitempty"`
 }
 
 // McpStatusResponse is the typed form of an mcp_status result.
@@ -326,14 +334,31 @@ type DeferredToolUse struct {
 
 // --- Permission updates ------------------------------------------------------
 
+// PermissionRuleValue is one rule in a [PermissionUpdate]'s Rules (a JSON
+// array of these).
+type PermissionRuleValue struct {
+	ToolName    string `json:"toolName"`
+	RuleContent string `json:"ruleContent,omitempty"`
+}
+
+// PermissionUpdateDestination is where a [PermissionUpdate] is saved.
+type PermissionUpdateDestination string
+
+const (
+	DestinationUserSettings    PermissionUpdateDestination = "userSettings"
+	DestinationProjectSettings PermissionUpdateDestination = "projectSettings"
+	DestinationLocalSettings   PermissionUpdateDestination = "localSettings"
+	DestinationSession         PermissionUpdateDestination = "session"
+)
+
 // PermissionUpdate describes a runtime change to the permission ruleset.
 type PermissionUpdate struct {
-	Type        string          `json:"type"` // addRules | replaceRules | removeRules | setMode | addDirectories | removeDirectories
-	Rules       json.RawMessage `json:"rules,omitempty"`
-	Behavior    string          `json:"behavior,omitempty"`
-	Mode        PermissionMode  `json:"mode,omitempty"`
-	Directories []string        `json:"directories,omitempty"`
-	Destination string          `json:"destination,omitempty"`
+	Type        string                      `json:"type"` // addRules | replaceRules | removeRules | setMode | addDirectories | removeDirectories
+	Rules       json.RawMessage             `json:"rules,omitempty"`
+	Behavior    string                      `json:"behavior,omitempty"`
+	Mode        PermissionMode              `json:"mode,omitempty"`
+	Directories []string                    `json:"directories,omitempty"`
+	Destination PermissionUpdateDestination `json:"destination,omitempty"`
 }
 
 // --- Message origin ----------------------------------------------------------

@@ -11,13 +11,19 @@
 package claude
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -805,11 +811,9 @@ func TestE2EResultOriginRoundTrip(t *testing.T) {
 	}
 	defer func() { _ = c.Close() }()
 
-	// The public API sends unstamped prompts; write a host-stamped frame
-	// directly, as upstream's test streams one.
-	stamped := []byte(`{"type":"user","message":{"role":"user","content":"Reply with exactly: one"},` +
-		`"parent_tool_use_id":null,"session_id":"default","origin":{"kind":"human"}}`)
-	if err := c.sess.t.Write(ctx, stamped); err != nil {
+	stamped := map[string]any{"type": "user", "message": map[string]any{"role": "user", "content": "Reply with exactly: one"},
+		"parent_tool_use_id": nil, "origin": map[string]any{"kind": "human"}}
+	if err := c.QueryMessages(ctx, slices.Values([]map[string]any{stamped})); err != nil {
 		t.Fatal(err)
 	}
 	r1 := receiveResult(t, ctx, c, nil)
@@ -1272,5 +1276,40 @@ func TestE2ESdkMcpAnnotationsReachCLI(t *testing.T) {
 	}
 	if a := byName["writer"]; a == nil || a.ReadOnly || !a.Destructive {
 		t.Errorf("writer annotations = %+v", a)
+	}
+}
+
+// --- Streamed messages carry content blocks ------------------------------------
+
+func TestE2EQueryMessagesImageContent(t *testing.T) {
+	e2eSkip(t)
+	img := image.NewRGBA(image.Rect(0, 0, 32, 32))
+	for y := 0; y < 32; y++ {
+		for x := 0; x < 32; x++ {
+			img.Set(x, y, color.RGBA{R: 255, A: 255})
+		}
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatal(err)
+	}
+	msg := map[string]any{"type": "user", "parent_tool_use_id": nil, "message": map[string]any{"role": "user", "content": []any{
+		map[string]any{"type": "image", "source": map[string]any{"type": "base64", "media_type": "image/png",
+			"data": base64.StdEncoding.EncodeToString(buf.Bytes())}},
+		map[string]any{"type": "text", "text": "What single color fills this image? Reply with one lowercase word."},
+	}}}
+	ctx, cancel := e2eCtx(t)
+	defer cancel()
+	var result *ResultMessage
+	for m, err := range QueryMessages(ctx, slices.Values([]map[string]any{msg}), isolatedOpts(t.TempDir())...) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r, ok := m.(*ResultMessage); ok {
+			result = r
+		}
+	}
+	if result == nil || result.IsError || !strings.Contains(strings.ToLower(result.Result), "red") {
+		t.Errorf("result = %+v", result)
 	}
 }

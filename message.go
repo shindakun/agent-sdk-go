@@ -22,17 +22,30 @@ type AssistantMessage struct {
 	// ParentToolUseID is set when this message originates inside a subagent's
 	// context, identifying the Agent tool call that spawned it.
 	ParentToolUseID string
-	MessageID       string          `json:"message_id,omitempty"`
-	StopReason      string          `json:"stop_reason,omitempty"`
-	SessionID       string          `json:"session_id,omitempty"`
-	UUID            string          `json:"uuid,omitempty"`
-	Usage           *Usage          `json:"usage,omitempty"`
-	Error           json.RawMessage `json:"error,omitempty"`
+	MessageID       string `json:"message_id,omitempty"`
+	StopReason      string `json:"stop_reason,omitempty"`
+	SessionID       string `json:"session_id,omitempty"`
+	UUID            string `json:"uuid,omitempty"`
+	Usage           *Usage `json:"usage,omitempty"`
+	// Error is set when the turn failed, such as ErrorRateLimit.
+	Error AssistantMessageError `json:"error,omitempty"`
 	// Raw is the undecoded JSON of the message for forward-compatibility.
 	Raw json.RawMessage
 }
 
 func (*AssistantMessage) isMessage() {}
+
+// AssistantMessageError classifies a failed assistant turn.
+type AssistantMessageError string
+
+const (
+	ErrorAuthenticationFailed AssistantMessageError = "authentication_failed"
+	ErrorBillingError         AssistantMessageError = "billing_error"
+	ErrorRateLimit            AssistantMessageError = "rate_limit"
+	ErrorInvalidRequest       AssistantMessageError = "invalid_request"
+	ErrorServerError          AssistantMessageError = "server_error"
+	ErrorUnknown              AssistantMessageError = "unknown"
+)
 
 // UserMessage is a user turn, including synthesized tool-result turns.
 type UserMessage struct {

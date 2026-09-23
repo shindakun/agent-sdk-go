@@ -1,6 +1,7 @@
 package claude
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -115,9 +116,23 @@ func decodeAssistant(b []byte) (Message, error) {
 		SessionID:       env.SessionID,
 		UUID:            env.UUID,
 		Usage:           env.Message.Usage,
-		Error:           env.Error,
+		Error:           assistantError(env.Error),
 		Raw:             clone(b),
 	}, nil
+}
+
+// assistantError reads the top-level error of an assistant frame: a string
+// naming the failure. Any other non-null value reads as ErrorUnknown.
+func assistantError(raw json.RawMessage) AssistantMessageError {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || string(raw) == "null" {
+		return ""
+	}
+	var s string
+	if json.Unmarshal(raw, &s) == nil {
+		return AssistantMessageError(s)
+	}
+	return ErrorUnknown
 }
 
 func decodeUser(b []byte) (Message, error) {

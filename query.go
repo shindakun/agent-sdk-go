@@ -10,8 +10,8 @@ import (
 // on error); breaking out of the range loop early cancels the CLI subprocess
 // and releases all resources.
 //
-// A working `claude` binary must be available (see [WithCLIPath]). Errors —
-// binary discovery, connection, decode, or a non-zero CLI exit — are delivered
+// A working `claude` binary must be available (see [WithCLIPath]). Errors
+// (binary discovery, connection, decode, or a non-zero CLI exit) are delivered
 // as the second value of the iterator and terminate iteration.
 //
 //	for msg, err := range claude.Query(ctx, "hello") {
@@ -19,6 +19,30 @@ import (
 //	    // type-switch on msg
 //	}
 func Query(ctx context.Context, prompt string, opts ...Option) iter.Seq2[Message, error] {
+	return runQuery(ctx, opts, func(ctx context.Context, c *Client) (int, error) {
+		return 1, c.Query(ctx, prompt)
+	})
+}
+
+// QueryMessages is [Query] with streamed user messages instead of a string
+// prompt, the counterpart of passing an async iterable to the official
+// query(). See [Client.QueryMessages] for the message shape. Input ends once
+// every message is written (after the run-ending result when callbacks need
+// the control channel); if msgs yields nothing, it ends at once.
+func QueryMessages(ctx context.Context, msgs iter.Seq[map[string]any], opts ...Option) iter.Seq2[Message, error] {
+	return runQuery(ctx, opts, func(ctx context.Context, c *Client) (int, error) {
+		sess, err := c.session()
+		if err != nil {
+			return 0, err
+		}
+		return sess.sendMessages(ctx, msgs, "")
+	})
+}
+
+// runQuery connects a client, sends the prompt with send (which reports how
+// many messages it wrote), ends input, and yields the messages until the run
+// ends.
+func runQuery(ctx context.Context, opts []Option, send func(context.Context, *Client) (int, error)) iter.Seq2[Message, error] {
 	return func(yield func(Message, error) bool) {
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
@@ -28,20 +52,23 @@ func Query(ctx context.Context, prompt string, opts ...Option) iter.Seq2[Message
 			yield(nil, err)
 			return
 		}
-		// Close on iterator exit; its error (a non-zero CLI exit) is best-effort
-		// here — message-level errors already surfaced through yield above.
+		// Close on iterator exit; its error (a non-zero CLI exit) is reported
+		// through the stream when it matters, so it is not repeated here.
 		defer func() { _ = client.Close() }()
 
-		if err := client.Query(ctx, prompt); err != nil {
+		written, err := send(ctx, client)
+		if err != nil {
+			_ = client.sess.endInput()
 			yield(nil, err)
 			return
 		}
 
-		// One-shot: signal end-of-input so the CLI exits after the turn. If the
-		// session needs bidirectional traffic (SDK MCP servers, hooks, or a
-		// permission callback), keep stdin open until a run-ending result;
-		// close it immediately otherwise. This mirrors the official SDK.
-		bidi := client.sess.needsBidirectional()
+		// One-shot: end input so the CLI exits after the run. If the session
+		// needs bidirectional traffic (SDK MCP servers, hooks, or a permission
+		// callback), keep stdin open until a run-ending result; close it
+		// immediately otherwise, or when nothing was sent (no result would
+		// come to release it). This mirrors the official SDK.
+		bidi := client.sess.needsBidirectional() && written > 0
 		if !bidi {
 			_ = client.sess.endInput()
 		}

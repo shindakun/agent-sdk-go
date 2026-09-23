@@ -130,8 +130,20 @@ func marshalHookOutput(out HookOutput) (json.RawMessage, error) {
 	if out.SystemMessage != "" {
 		m["systemMessage"] = out.SystemMessage
 	}
+	if out.Reason != "" {
+		m["reason"] = out.Reason
+	}
 	if out.Continue != nil {
 		m["continue"] = *out.Continue
+	}
+	if out.StopReason != "" {
+		m["stopReason"] = out.StopReason
+	}
+	if out.Async {
+		m["async"] = true
+		if out.AsyncTimeout > 0 {
+			m["asyncTimeout"] = out.AsyncTimeout
+		}
 	}
 	if out.SuppressOutput {
 		m["suppressOutput"] = true

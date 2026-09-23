@@ -62,7 +62,8 @@ type Options struct {
 	// initialize-request-mapped configuration.
 	hooks                  map[HookEvent][]HookMatcher
 	agents                 map[string]AgentDefinition
-	skills                 []string
+	skills                 []string // nil: not configured; empty: no skills
+	allSkills              bool
 	excludeDynamicSections bool
 	forwardSubagentText    bool
 	mcpServers             map[string]McpServerConfig
@@ -478,9 +479,29 @@ func WithAgents(agents map[string]AgentDefinition) Option {
 	}
 }
 
-// WithSkills enables the named skills.
+// WithSkills enables only the named skills (a SKILL.md name or directory
+// name, or plugin:skill). With no names, every skill is suppressed from the
+// listing. Setting it also adds the matching Skill(name) rules to the allowed
+// tools and, unless [WithSettingSources] is given, loads user and project
+// settings so installed skills are found. When neither WithSkills nor
+// [WithAllSkills] is set, the CLI's own defaults apply.
 func WithSkills(skills ...string) Option {
-	return func(o *Options) { o.skills = append(o.skills, skills...) }
+	return func(o *Options) {
+		if o.skills == nil {
+			o.skills = []string{}
+		}
+		o.skills = append(o.skills, skills...)
+		o.allSkills = false
+	}
+}
+
+// WithAllSkills enables every discovered skill: it allows the Skill tool and,
+// unless [WithSettingSources] is given, loads user and project settings.
+func WithAllSkills() Option {
+	return func(o *Options) {
+		o.allSkills = true
+		o.skills = nil
+	}
 }
 
 // WithForwardSubagentText forwards subagent text and thinking blocks on the
