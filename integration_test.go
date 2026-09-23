@@ -251,7 +251,7 @@ func TestIntegrationCanUseToolOnlyStringPrompt(t *testing.T) {
 		t.Fatal(err)
 	}
 	path := filepath.Join(home, fmt.Sprintf(".agent_sdk_go_permission_it_%d.txt", time.Now().UnixNano()))
-	defer os.Remove(path)
+	defer func() { _ = os.Remove(path) }()
 
 	var mu sync.Mutex
 	var calls []string

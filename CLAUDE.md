@@ -4,6 +4,7 @@
 # Format and lint
 gofmt -w .
 go vet ./...
+golangci-lint run ./...   # v2; .golangci.yml sets the integration/e2e build tags
 
 # Build everything (library + examples)
 go build ./...
@@ -26,7 +27,8 @@ bash scripts/run-examples.sh
 CI lives in `.github/workflows/`: `lint` and `test` (race, OS matrix) run on
 every PR/push; `e2e` is manual (`workflow_dispatch`) and needs an
 `ANTHROPIC_API_KEY` secret. The lint/test jobs mirror the local `gofmt`/`vet`/
-`go test -race` commands above, so a green local run predicts green CI.
+`golangci-lint`/`go test -race` commands above, so a green local run predicts
+green CI.
 
 # Codebase Structure
 
