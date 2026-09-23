@@ -5,6 +5,26 @@ All notable changes to this project are documented here. The format is based on
 
 ## Unreleased
 
+### Added
+
+- **`WithVerbatimPrompts`** marks every user message `client_composed`, so
+  Claude Code delivers the prompt as written: no `@path` file expansion and no
+  slash-command dispatch. Without it, an `@/absolute/path` anywhere in prompt
+  text makes Claude Code read that file into the prompt, whatever tools are
+  allowed. Requires Claude Code 2.1.248 or later. Ports upstream `f7547d7`.
+- **Connect-time CLI version check.** When a `WithStderr` writer is set, connect
+  writes a warning for a CLI older than 2.0.0, and for one older than 2.1.248
+  when `WithVerbatimPrompts` is on. `CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK`
+  disables it, as upstream.
+
+### Fixed
+
+- **`WithSettingSources()` with no sources had no effect.** Upstream's
+  `setting_sources=[]` loads no settings files; the Go option could not express
+  it and fell back to the CLI default, which loads user and project settings.
+  An explicit empty call now sends `--setting-sources=`. The flag uses the
+  `--setting-sources=value` form throughout, as upstream.
+
 ## [v0.3.0] - 2026-08-04
 
 ### Changed

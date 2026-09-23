@@ -83,6 +83,9 @@ type Options struct {
 	sessionStore      SessionStore
 	sessionStoreFlush SessionStoreFlushMode
 
+	// SDK-side behavior, not sent to the CLI as flags.
+	verbatimPrompts bool
+
 	// runtime callbacks.
 	canUseTool CanUseTool
 
@@ -217,11 +220,37 @@ func WithIncludePartialMessages() Option {
 	return func(o *Options) { o.includePartialMessages = true }
 }
 
+// WithVerbatimPrompts delivers every prompt to Claude as written. Each user
+// message the SDK sends is marked client_composed, so Claude Code does not
+// expand @path file mentions or dispatch slash commands in it. Use it when
+// prompt text includes content the end user did not type (prior turns, tool
+// results, third-party text): otherwise an @/absolute/path inside it makes
+// Claude Code read that file into the prompt, whatever tools are allowed.
+//
+// A turn delivered this way also skips Claude Code's turn-start attachment
+// pass: @server:resource MCP mentions are not expanded, and the prompt goes
+// without the context normally attached to it (nested CLAUDE.md and rules
+// files, skill and tool listings, per-turn reminders). The pass Claude Code
+// runs between tool calls is unaffected, so most of that context arrives after
+// the turn's first tool call.
+//
+// Requires Claude Code 2.1.248 or later; older versions ignore the marker.
+// When [WithStderr] is set, connecting to an older CLI with this option on
+// writes a warning there.
+func WithVerbatimPrompts() Option {
+	return func(o *Options) { o.verbatimPrompts = true }
+}
+
 // WithSettingSources controls which filesystem settings sources the CLI loads
 // (for example "user", "project", "local"). When unset, the CLI default
-// applies.
+// applies. Called with no sources, the CLI loads no settings files.
 func WithSettingSources(sources ...string) Option {
-	return func(o *Options) { o.settingSources = append(o.settingSources, sources...) }
+	return func(o *Options) {
+		if o.settingSources == nil {
+			o.settingSources = []string{}
+		}
+		o.settingSources = append(o.settingSources, sources...)
+	}
 }
 
 // WithSandbox configures the CLI command sandbox.

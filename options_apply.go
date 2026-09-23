@@ -173,8 +173,10 @@ func (o *Options) buildArgs() ([]string, error) {
 	if o.includePartialMessages {
 		args = append(args, "--include-partial-messages")
 	}
-	if len(settingSources) > 0 {
-		args = append(args, "--setting-sources", joinComma(settingSources))
+	// Equals form, so an empty list (load no settings) is still one flag with
+	// an empty value.
+	if settingSources != nil {
+		args = append(args, "--setting-sources="+joinComma(settingSources))
 	}
 
 	mcpArg, err := o.buildMcpConfig()
@@ -222,8 +224,8 @@ func (o *Options) buildArgs() ([]string, error) {
 // original Options is not mutated.
 func (o *Options) effectiveSkillsDefaults() (allowed, settingSources []string) {
 	allowed = append([]string(nil), o.allowedTools...)
-	if len(o.settingSources) > 0 {
-		settingSources = append([]string(nil), o.settingSources...)
+	if o.settingSources != nil {
+		settingSources = append([]string{}, o.settingSources...)
 	}
 
 	if len(o.skills) == 0 {

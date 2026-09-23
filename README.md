@@ -185,6 +185,15 @@ call, use a `PreToolUse` hook instead, or narrow the entry so calls fall through
 to the callback. Allow rules in settings files can shadow the callback too, and
 are not visible to this check.
 
+## Untrusted prompt text
+
+Claude Code expands an `@/absolute/path` mention in a prompt into that file's
+contents before the model runs, and dispatches a leading `/name` as a slash
+command. Neither depends on the tools you allow. If prompts include text the
+end user did not type (earlier turns, tool output, third-party content), set
+`claude.WithVerbatimPrompts()` so every prompt is delivered as written. This
+needs Claude Code 2.1.248 or later.
+
 ## Types
 
 The streamed `Message` union: `AssistantMessage`, `UserMessage`, `SystemMessage`,

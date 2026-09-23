@@ -13,7 +13,10 @@ package claude
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -517,5 +520,123 @@ func TestE2EQuerySessionMultiTurn(t *testing.T) {
 	}
 	if result == nil || !strings.Contains(strings.ToLower(result.Result), "kumquat") {
 		t.Errorf("QuerySession lost context; result = %+v", result)
+	}
+}
+
+// --- Verbatim prompts (mirrors test_verbatim_prompts.py) ----------------------
+
+// verbatimOptions leaves the model no tools, so the only way it can learn the
+// marker is the prompt's @-mention expansion.
+func verbatimOptions(cwd string, verbatim bool) []Option {
+	opts := []Option{
+		WithCwd(cwd),
+		WithModel("haiku"),
+		WithToolList(),
+		WithSettingSources(),
+		WithStrictMcpConfig(),
+		WithMaxTurns(1),
+	}
+	if verbatim {
+		opts = append(opts, WithVerbatimPrompts())
+	}
+	return opts
+}
+
+// plantMarker writes a random marker to a file outside the working directory
+// and returns the prompt that @-mentions it, the marker, and the cwd.
+func plantMarker(t *testing.T) (prompt, marker, cwd string) {
+	t.Helper()
+	dir := t.TempDir()
+	marker = fmt.Sprintf("MARKER-%x", time.Now().UnixNano())
+	secret := filepath.Join(dir, "outside", "secret.txt")
+	cwd = filepath.Join(dir, "cwd")
+	for _, d := range []string{filepath.Dir(secret), cwd} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(secret, []byte("The marker is "+marker+".\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	prompt = "What marker does this file contain? Reply with only the marker, or " +
+		"UNKNOWN if you cannot see it. @" + secret
+	return prompt, marker, cwd
+}
+
+func assistantText(t *testing.T, m *AssistantMessage) string {
+	t.Helper()
+	var b strings.Builder
+	for _, c := range m.Content {
+		switch blk := c.(type) {
+		case *ToolUseBlock:
+			t.Fatalf("unexpected tool call %s", blk.Name)
+		case *TextBlock:
+			b.WriteString(blk.Text)
+		}
+	}
+	return b.String()
+}
+
+func replyViaQuery(t *testing.T, prompt string, opts ...Option) string {
+	t.Helper()
+	ctx, cancel := e2eCtx(t)
+	defer cancel()
+	var reply string
+	for msg, err := range Query(ctx, prompt, opts...) {
+		if err != nil {
+			t.Fatalf("query: %v", err)
+		}
+		if m, ok := msg.(*AssistantMessage); ok {
+			reply += assistantText(t, m)
+		}
+	}
+	return reply
+}
+
+func TestE2EAtPathExpandedByDefault(t *testing.T) {
+	e2eSkip(t)
+	prompt, marker, cwd := plantMarker(t)
+	if reply := replyViaQuery(t, prompt, verbatimOptions(cwd, false)...); !strings.Contains(reply, marker) {
+		t.Errorf("control: the @-mention was not expanded, so the verbatim tests prove nothing; reply=%q", reply)
+	}
+}
+
+func TestE2EVerbatimQueryNotExpanded(t *testing.T) {
+	e2eSkip(t)
+	prompt, marker, cwd := plantMarker(t)
+	if reply := replyViaQuery(t, prompt, verbatimOptions(cwd, true)...); strings.Contains(reply, marker) {
+		t.Errorf("the @-mentioned file was read despite WithVerbatimPrompts; reply=%q", reply)
+	}
+}
+
+func TestE2EVerbatimClientNotExpanded(t *testing.T) {
+	e2eSkip(t)
+	prompt, marker, cwd := plantMarker(t)
+	ctx, cancel := e2eCtx(t)
+	defer cancel()
+	client := NewClient(verbatimOptions(cwd, true)...)
+	if err := client.Connect(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = client.Close() }()
+	if err := client.Query(ctx, prompt); err != nil {
+		t.Fatal(err)
+	}
+	var reply string
+	for msg, err := range client.ReceiveResponse(ctx) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		switch m := msg.(type) {
+		case *AssistantMessage:
+			reply += assistantText(t, m)
+		case *ResultMessage:
+			if m.IsError {
+				t.Fatalf("result error: %+v", m)
+			}
+		}
+	}
+	if strings.Contains(reply, marker) {
+		t.Errorf("the @-mentioned file was read despite WithVerbatimPrompts; reply=%q", reply)
 	}
 }

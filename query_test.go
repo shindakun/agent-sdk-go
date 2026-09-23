@@ -3,6 +3,7 @@ package claude
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -139,6 +140,9 @@ func TestBuildArgsParityFlags(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildArgs: %v", err)
 	}
+	if !argsContainEquals(args, "--setting-sources", "user,project") {
+		t.Errorf("missing --setting-sources=user,project; args=%v", args)
+	}
 	if !argsContainsFlag(args, "--include-partial-messages") {
 		t.Error("missing --include-partial-messages")
 	}
@@ -149,7 +153,6 @@ func TestBuildArgsParityFlags(t *testing.T) {
 		t.Error("missing --fork-session")
 	}
 	for flag, val := range map[string]string{
-		"--setting-sources":        "user,project",
 		"--permission-prompt-tool": "mcp__perm__prompt",
 		"--fallback-model":         "haiku",
 		"--max-budget-usd":         "2.5",
@@ -165,6 +168,21 @@ func TestBuildArgsParityFlags(t *testing.T) {
 	// --add-dir appears once per directory.
 	if !argsContainPair(args, "--add-dir", "/a") || !argsContainPair(args, "--add-dir", "/b") {
 		t.Errorf("missing per-dir --add-dir; args=%v", args)
+	}
+}
+
+// Unset leaves the CLI default (no flag); an explicit empty list loads no
+// settings files and must still reach the CLI, as upstream's setting_sources=[].
+func TestSettingSourcesUnsetVersusEmpty(t *testing.T) {
+	args, _ := newOptions().buildArgs()
+	for _, a := range args {
+		if strings.HasPrefix(a, "--setting-sources") {
+			t.Errorf("unset setting sources emitted %q", a)
+		}
+	}
+	args, _ = newOptions(WithSettingSources()).buildArgs()
+	if !argsContainEquals(args, "--setting-sources", "") {
+		t.Errorf("empty setting sources missing --setting-sources=; args=%v", args)
 	}
 }
 

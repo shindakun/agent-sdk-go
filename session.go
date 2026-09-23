@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"os"
 	"sync"
 
 	"github.com/shindakun/agent-sdk-go/internal/protocol"
@@ -50,14 +51,20 @@ func (s *session) connect(ctx context.Context) error {
 		return err
 	}
 
-	// Advisory: a CanUseTool callback that is auto-approved away never fires,
-	// which is indistinguishable from it having granted permission. Emitted
-	// once per connect, before the spawn, so it is visible even if the CLI
-	// fails to start. Callers can inspect the same condition programmatically
-	// via Options.CanUseToolShadowed.
+	// Advisories, emitted once per connect before the spawn so they are visible
+	// even if the CLI fails to start. A CanUseTool callback that is
+	// auto-approved away never fires, which is indistinguishable from it having
+	// granted permission; callers can inspect the same condition via
+	// Options.CanUseToolShadowed. The version check matches the official SDK,
+	// including its CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK opt-out.
 	if s.opts.stderr != nil {
 		if msg := s.opts.canUseToolShadowedWarning(); msg != "" {
 			_, _ = io.WriteString(s.opts.stderr, msg+"\n")
+		}
+		if os.Getenv("CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK") == "" {
+			for _, msg := range s.opts.cliVersionWarnings(ctx) {
+				_, _ = io.WriteString(s.opts.stderr, msg+"\n")
+			}
 		}
 	}
 
@@ -114,12 +121,14 @@ func (s *session) connect(ctx context.Context) error {
 // userInput is the stream-json envelope for a user prompt sent over stdin. The
 // field set mirrors the official SDKs exactly: a nested message with a string
 // content, an explicit null parent_tool_use_id, and a session_id (defaulting to
-// "default") so the CLI routes the turn correctly.
+// "default") so the CLI routes the turn correctly. client_composed is present
+// only when [WithVerbatimPrompts] is set.
 type userInput struct {
 	Type            string           `json:"type"` // "user"
 	Message         userInputMessage `json:"message"`
 	ParentToolUseID *string          `json:"parent_tool_use_id"`
 	SessionID       string           `json:"session_id"`
+	ClientComposed  bool             `json:"client_composed,omitempty"`
 }
 
 type userInputMessage struct {
@@ -132,8 +141,6 @@ func (s *session) sendPrompt(ctx context.Context, prompt string) error {
 	return s.sendPromptSession(ctx, prompt, "")
 }
 
-// sendPromptSession writes a prompt with an explicit session id. An empty
-// sessionID falls back to the captured session id, then "default".
 // setSessionID records the CLI-assigned session id (called from the read loop).
 func (s *session) setSessionID(id string) {
 	s.sidMu.Lock()
@@ -148,6 +155,8 @@ func (s *session) getSessionID() string {
 	return s.sessionID
 }
 
+// sendPromptSession writes a prompt with an explicit session id. An empty
+// sessionID falls back to the captured session id, then "default".
 func (s *session) sendPromptSession(ctx context.Context, prompt, sessionID string) error {
 	sid := sessionID
 	if sid == "" {
@@ -161,6 +170,7 @@ func (s *session) sendPromptSession(ctx context.Context, prompt, sessionID strin
 		Message:         userInputMessage{Role: "user", Content: prompt},
 		ParentToolUseID: nil,
 		SessionID:       sid,
+		ClientComposed:  s.opts.verbatimPrompts,
 	}
 	b, err := json.Marshal(in)
 	if err != nil {

@@ -355,12 +355,12 @@ func TestSkillsDefaults(t *testing.T) {
 	if !argsContainPair(args, "--allowedTools", "Skill(my-skill),Skill(other)") {
 		t.Errorf("skills not injected into allowedTools; args=%v", args)
 	}
-	if !argsContainPair(args, "--setting-sources", "user,project") {
+	if !argsContainEquals(args, "--setting-sources", "user,project") {
 		t.Errorf("setting-sources default missing; args=%v", args)
 	}
 	// Explicit setting-sources is preserved.
 	args, _ = newOptions(WithSkills("s"), WithSettingSources("local")).buildArgs()
-	if !argsContainPair(args, "--setting-sources", "local") {
+	if !argsContainEquals(args, "--setting-sources", "local") {
 		t.Errorf("explicit setting-sources overridden; args=%v", args)
 	}
 	// No skills -> no injection.

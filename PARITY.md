@@ -44,6 +44,11 @@ Notable wire details verified against the source:
   extracts `<command-name>`.
 - One-shot `Query` closes stdin after the prompt (immediately, or after the first
   result when SDK MCP/hooks/CanUseTool are configured) so the CLI exits.
+- `verbatim_prompts` is SDK-side, not a CLI flag: `WithVerbatimPrompts` adds
+  `"client_composed": true` to each user frame.
+- `setting_sources=None` sends no flag; `setting_sources=[]` sends
+  `--setting-sources=` (load no settings). `WithSettingSources()` with no
+  arguments is the empty form.
 
 ## Core
 
@@ -142,6 +147,8 @@ Two test tiers run against the real `claude` binary:
 | `test_sdk_mcp_tools.py` | `TestE2ESdkMcpMultipleTools`, `…PermissionEnforcement` |
 | `test_include_partial_messages.py` | `TestE2EPartialMessagesPresentAndAbsent` |
 | `test_stderr_callback.py` | `TestE2EStderrCallback` |
+| `test_verbatim_prompts.py` | `TestE2EAtPathExpandedByDefault`, `TestE2EVerbatimQueryNotExpanded`, `TestE2EVerbatimClientNotExpanded` |
+| `test_tool_permissions.py` | `TestIntegrationCanUseToolOnlyStringPrompt`, `TestIntegrationCanUseToolDeny` (integration tier) |
 | (plugins) | `TestE2EPluginLoaded` |
 
 Plugin note: a plugin's commands are **auto-discovered** from its `commands/`
