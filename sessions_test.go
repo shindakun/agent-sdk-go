@@ -16,6 +16,20 @@ func TestSanitizePath(t *testing.T) {
 		t.Errorf("sanitize = %q", got)
 	}
 
+	// Vectors from the official SDK's _simple_hash: the last three hash
+	// negative, where the CLI takes the absolute value.
+	for in, want := range map[string]string{
+		"":                                   "0",
+		"hello":                              "1n1e4y",
+		"/" + strings.Repeat("a", 300):       "vtkmfl",
+		"/Users/" + strings.Repeat("x", 250): "v4ezpm",
+		"/" + strings.Repeat("a", 300) + "/ünï": "zbxwf7",
+	} {
+		if got := simpleHash(in); got != want {
+			t.Errorf("simpleHash(%.12q...) = %s, want %s", in, got, want)
+		}
+	}
+
 	// Long paths get truncated with a base-36 hash suffix.
 	long := "/" + strings.Repeat("a", 300)
 	s := sanitizePath(long)
@@ -31,7 +45,7 @@ func TestSanitizePath(t *testing.T) {
 // session id.
 func writeSession(t *testing.T, home, cwd, id string, lines ...string) {
 	t.Helper()
-	dir := filepath.Join(home, ".claude", "projects", sanitizePath(cwd))
+	dir := filepath.Join(home, ".claude", "projects", ProjectKeyForDirectory(cwd))
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -47,6 +61,7 @@ func setHomeDir(t *testing.T, home string) {
 	t.Helper()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
 }
 
 func TestListAndReadSessions(t *testing.T) {

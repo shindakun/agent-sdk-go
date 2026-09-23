@@ -17,8 +17,39 @@ All notable changes to this project are documented here. The format is based on
   when `WithVerbatimPrompts` is on. `CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK`
   disables it, as upstream.
 
+- **Resuming from a `SessionStore`.** With `WithSessionStore` plus `WithResume`
+  or `WithContinueConversation`, the session is loaded from the store into a
+  temporary config dir the CLI runs against, including subagent transcripts
+  and metadata. The caller's credentials (refresh token removed, Keychain on
+  macOS), `.claude.json`, and user `settings.json` / `cowork_settings.json`
+  (plugin declarations and `env.CLAUDE_CONFIG_DIR` removed) are copied in, so
+  hosts that authenticate through `apiKeyHelper` stay logged in. Before this,
+  the store was ignored and the CLI looked for a local transcript. Ports
+  upstream `6e3d54f` with `b4d65f5`. `WithSessionStore` combined with
+  `WithEnableFileCheckpointing` is now rejected, as upstream.
+
+### Changed
+
+- **Breaking: `WithLoadTimeout` bounds SessionStore calls during resume**, as
+  upstream's `load_timeout_ms` does, instead of the initialize handshake. The
+  handshake timeout is 60s, or longer when `CLAUDE_CODE_STREAM_CLOSE_TIMEOUT`
+  (milliseconds) asks for more, as upstream.
+- `ProjectKeyForDirectory` makes the path absolute and resolves symlinks before
+  sanitizing, and defaults to the current directory, as the CLI does. A
+  directory reached through a symlink (such as a macOS temp dir under `/var`)
+  now gets the same key as the CLI's transcript directory.
+
 ### Fixed
 
+- **Long-path project keys did not match the CLI's.** The djb2 hash suffix for
+  paths over 200 characters was taken as unsigned; the CLI and upstream take the
+  absolute value of the signed hash, so every negative hash named a different
+  directory.
+- **The live mirror ignored `CLAUDE_CONFIG_DIR`.** Transcript paths were
+  resolved against `~/.claude/projects`, so with `CLAUDE_CONFIG_DIR` in
+  `WithEnv` (or the environment) no mirrored frame mapped to a session and the
+  store stayed empty. Session reading (`SessionsDir` and the functions built on
+  it) honors `CLAUDE_CONFIG_DIR` too.
 - **`WithSettingSources()` with no sources had no effect.** Upstream's
   `setting_sources=[]` loads no settings files; the Go option could not express
   it and fell back to the CLI default, which loads user and project settings.

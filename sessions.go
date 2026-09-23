@@ -62,28 +62,56 @@ type SessionMessage struct {
 // directory, applying the same sanitization the CLI uses. When directory is
 // empty, the current working directory is used.
 func SessionsDir(directory string) (string, error) {
-	if directory == "" {
-		wd, err := os.Getwd()
-		if err != nil {
-			return "", err
-		}
-		directory = wd
-	}
-	home, err := os.UserHomeDir()
+	projects, err := projectsDirFor(nil)
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".claude", "projects", sanitizePath(directory)), nil
+	return filepath.Join(projects, ProjectKeyForDirectory(directory)), nil
 }
 
-// projectsDirFor returns the ~/.claude/projects directory (the parent of all
-// per-project session dirs).
-func projectsDirFor() (string, error) {
+// claudeConfigDir returns the Claude config directory: CLAUDE_CONFIG_DIR from
+// env (the options env passed to the subprocess), then from the process
+// environment, then ~/.claude.
+func claudeConfigDir(env map[string]string) (string, error) {
+	if dir := env["CLAUDE_CONFIG_DIR"]; dir != "" {
+		return dir, nil
+	}
+	if dir := os.Getenv("CLAUDE_CONFIG_DIR"); dir != "" {
+		return dir, nil
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".claude", "projects"), nil
+	return filepath.Join(home, ".claude"), nil
+}
+
+// projectsDirFor returns the projects directory (the parent of all
+// per-project session dirs) under the config dir env resolves to.
+func projectsDirFor(env map[string]string) (string, error) {
+	dir, err := claudeConfigDir(env)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "projects"), nil
+}
+
+// canonicalizePath resolves a directory to the absolute, symlink-free form the
+// CLI keys projects by; "" means the current directory. On failure the input
+// is returned unchanged. The official SDK also NFC-normalizes, which only
+// matters on filesystems that store decomposed Unicode names.
+func canonicalizePath(d string) string {
+	if d == "" {
+		d = "."
+	}
+	abs, err := filepath.Abs(d)
+	if err != nil {
+		return d
+	}
+	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+		return resolved
+	}
+	return abs
 }
 
 // sanitizePath replaces non-alphanumeric runs with hyphens, appending a djb2
@@ -97,13 +125,18 @@ func sanitizePath(name string) string {
 	return sanitized[:maxSanitizedLength] + "-" + simpleHash(name)
 }
 
-// simpleHash is the djb2 variant used by the official SDK, in base 36.
+// simpleHash is the djb2 variant used by the official SDK and the CLI: a
+// 32-bit signed hash, absolute value, in base 36.
 func simpleHash(s string) string {
 	var h int32
 	for _, c := range s {
 		h = (h << 5) - h + c
 	}
-	return strconv.FormatInt(int64(uint32(h)), 36)
+	v := int64(h)
+	if v < 0 {
+		v = -v
+	}
+	return strconv.FormatInt(v, 36)
 }
 
 // ListSessions returns metadata for sessions in directory, newest first. A

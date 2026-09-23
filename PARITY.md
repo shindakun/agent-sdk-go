@@ -110,6 +110,7 @@ Notable wire details verified against the source:
 | `fold_session_summary`, `import_session_to_store` | `FoldSessionSummary`, `ImportSessionToStore` |
 | `project_key_for_directory` | `ProjectKeyForDirectory` |
 | live `session_store` mirror (transcript_mirror → store) | `WithSessionStore` + `MirrorErrorMessage` |
+| store-backed resume (`session_resume.py`: materialize into a temp `CLAUDE_CONFIG_DIR`) | `WithSessionStore` + `WithResume`/`WithContinueConversation`, bounded by `WithLoadTimeout` |
 
 Session reading is disk-based: it reads the CLI's
 `~/.claude/projects/<sanitized-cwd>/<id>.jsonl` transcripts directly, using the
@@ -147,6 +148,7 @@ Two test tiers run against the real `claude` binary:
 | `test_sdk_mcp_tools.py` | `TestE2ESdkMcpMultipleTools`, `…PermissionEnforcement` |
 | `test_include_partial_messages.py` | `TestE2EPartialMessagesPresentAndAbsent` |
 | `test_stderr_callback.py` | `TestE2EStderrCallback` |
+| `test_session_store_resume_settings.py` | `TestE2ESessionStoreResumeAppliesUserSettings` |
 | `test_verbatim_prompts.py` | `TestE2EAtPathExpandedByDefault`, `TestE2EVerbatimQueryNotExpanded`, `TestE2EVerbatimClientNotExpanded` |
 | `test_tool_permissions.py` | `TestIntegrationCanUseToolOnlyStringPrompt`, `TestIntegrationCanUseToolDeny` (integration tier) |
 | (plugins) | `TestE2EPluginLoaded` |

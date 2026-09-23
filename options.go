@@ -318,7 +318,11 @@ func WithMaxBufferSize(bytes int) Option {
 	return func(o *Options) { o.maxBufferSize = bytes }
 }
 
-// WithLoadTimeout overrides the initialize-handshake timeout.
+// WithLoadTimeout bounds each SessionStore call (Load, ListSessions,
+// ListSubkeys) made while resuming a session from the store (see
+// [WithSessionStore]). The default is 60 seconds; zero or less uses it. A
+// store that does not answer in time fails the connect with an error instead
+// of hanging.
 func WithLoadTimeout(d time.Duration) Option {
 	return func(o *Options) { o.loadTimeout = d }
 }
@@ -340,6 +344,13 @@ func WithUser(uid, gid int) Option {
 
 // WithSessionStore mirrors the live transcript into store using the given flush
 // mode. Append failures surface as a [MirrorErrorMessage] on the stream.
+//
+// Combined with [WithResume] or [WithContinueConversation], the session is
+// resumed from the store rather than from a local transcript: it is written to
+// a temporary config dir the CLI runs against (CLAUDE_CONFIG_DIR), seeded with
+// the caller's credentials and user settings, and removed on close. The resume
+// value must be a session UUID. Cannot be combined with
+// [WithEnableFileCheckpointing].
 func WithSessionStore(store SessionStore, flush SessionStoreFlushMode) Option {
 	return func(o *Options) {
 		o.sessionStore = store

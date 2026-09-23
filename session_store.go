@@ -10,7 +10,9 @@ import (
 
 // SessionStore is an abstract transcript store, mirroring the official SDK's
 // SessionStore. Implementations persist session entries keyed by project and
-// session id; [InMemorySessionStore] is the built-in implementation.
+// session id; [InMemorySessionStore] is the built-in implementation. A store
+// without subagent support may return an error wrapping errors.ErrUnsupported
+// from ListSubkeys; resuming then restores the main transcript only.
 type SessionStore interface {
 	Append(ctx context.Context, key SessionKey, entries []SessionStoreEntry) error
 	Load(ctx context.Context, key SessionKey) ([]SessionStoreEntry, error)
@@ -190,9 +192,12 @@ func extractMessage(data json.RawMessage) json.RawMessage {
 }
 
 // ProjectKeyForDirectory returns the project key (the sanitized directory name)
-// the CLI uses for sessions under the given working directory.
+// the CLI uses for sessions under the given working directory, which defaults
+// to the current directory. The path is made absolute and symlinks are
+// resolved first, as the CLI does, so keys match between local transcripts and
+// store-mirrored ones.
 func ProjectKeyForDirectory(directory string) string {
-	return sanitizePath(directory)
+	return sanitizePath(canonicalizePath(directory))
 }
 
 // ForkSessionResult reports the new session id produced by a fork.

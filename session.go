@@ -6,7 +6,9 @@ import (
 	"errors"
 	"io"
 	"os"
+	"strconv"
 	"sync"
+	"time"
 
 	"github.com/shindakun/agent-sdk-go/internal/protocol"
 	"github.com/shindakun/agent-sdk-go/internal/transport"
@@ -36,6 +38,9 @@ type session struct {
 	// initResult is the CLI's initialize response, surfaced via
 	// Client.GetServerInfo.
 	initResult json.RawMessage
+	// materialized is the temp config dir of a SessionStore-backed resume,
+	// removed on close.
+	materialized *materializedResume
 }
 
 func newSession(opts *Options) *session {
@@ -45,7 +50,28 @@ func newSession(opts *Options) *session {
 // connect spawns the CLI, starts the protocol engine, and performs the
 // initialize handshake. Inbound control requests (permissions, hooks, MCP) are
 // serviced by the handler the session builds from its options.
-func (s *session) connect(ctx context.Context) error {
+func (s *session) connect(ctx context.Context) (err error) {
+	if err := s.opts.validateSessionStoreOptions(); err != nil {
+		return err
+	}
+	m, err := materializeResumeSession(ctx, s.opts)
+	if err != nil {
+		return err
+	}
+	if m != nil {
+		s.materialized = m
+		s.opts = m.applyTo(s.opts)
+		defer func() {
+			if err != nil {
+				if s.t != nil {
+					_ = s.t.Close()
+				}
+				m.cleanup()
+				s.materialized = nil
+			}
+		}()
+	}
+
 	args, err := s.opts.buildArgs()
 	if err != nil {
 		return err
@@ -101,7 +127,7 @@ func (s *session) connect(ctx context.Context) error {
 		s.mirror = newMirrorBatcher(
 			s.opts.sessionStore,
 			s.opts.sessionStoreFlush,
-			func() (string, error) { return projectsDirFor() },
+			func() (string, error) { return projectsDirFor(s.opts.env) },
 			func(m Message) { s.injectCh <- m },
 		)
 		s.engine.SetMirrorSink(s.mirror.enqueue)
@@ -109,7 +135,7 @@ func (s *session) connect(ctx context.Context) error {
 
 	s.engine.Start()
 
-	initResult, err := s.engine.Initialize(ctx, init, s.opts.loadTimeout)
+	initResult, err := s.engine.Initialize(ctx, init, initializeTimeout())
 	if err != nil {
 		_ = s.t.Close()
 		return &ConnectionError{Err: err}
@@ -203,7 +229,8 @@ func (s *session) messages() <-chan protocol.MessageLine {
 	return s.engine.Messages()
 }
 
-// close shuts the engine and transport down.
+// close shuts the engine and transport down, then removes a materialized
+// resume dir.
 func (s *session) close() error {
 	if s.mirror != nil {
 		s.mirror.Flush(context.Background())
@@ -211,10 +238,27 @@ func (s *session) close() error {
 	if s.engine != nil {
 		s.engine.Close()
 	}
+	var err error
 	if s.t != nil {
-		return mapTransportError(s.t.Close())
+		err = mapTransportError(s.t.Close())
 	}
-	return nil
+	if s.materialized != nil {
+		s.materialized.cleanup()
+	}
+	return err
+}
+
+// initializeTimeout bounds the initialize handshake: 60s, or longer when
+// CLAUDE_CODE_STREAM_CLOSE_TIMEOUT (milliseconds) asks for more, as the
+// official SDK computes it.
+func initializeTimeout() time.Duration {
+	d := protocol.DefaultInitializeTimeout
+	if ms, err := strconv.Atoi(os.Getenv("CLAUDE_CODE_STREAM_CLOSE_TIMEOUT")); err == nil {
+		if v := time.Duration(ms) * time.Millisecond; v > d {
+			d = v
+		}
+	}
+	return d
 }
 
 // mapTransportError translates internal transport errors into the public typed

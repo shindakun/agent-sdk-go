@@ -640,3 +640,92 @@ func TestE2EVerbatimClientNotExpanded(t *testing.T) {
 		t.Errorf("the @-mentioned file was read despite WithVerbatimPrompts; reply=%q", reply)
 	}
 }
+
+// --- SessionStore resume (mirrors test_session_store_resume_settings.py) -----
+
+// callerConfigDir returns a fresh CLAUDE_CONFIG_DIR carrying the developer's
+// login (refresh token removed, so the throwaway dir can never consume the
+// real login's single-use refresh token). CI authenticates through env vars,
+// which the subprocess inherits.
+func callerConfigDir(t *testing.T) string {
+	t.Helper()
+	d := t.TempDir()
+	home, _ := os.UserHomeDir()
+	creds, err := os.ReadFile(filepath.Join(home, ".claude", ".credentials.json"))
+	if err != nil {
+		creds = keychainCredentials()
+	}
+	writeRedactedCredentials(creds, filepath.Join(d, ".credentials.json"))
+	return d
+}
+
+func runInitAndResult(t *testing.T, prompt string, opts ...Option) (map[string]any, *ResultMessage) {
+	t.Helper()
+	ctx, cancel := e2eCtx(t)
+	defer cancel()
+	var (
+		init   map[string]any
+		result *ResultMessage
+	)
+	for msg, err := range Query(ctx, prompt, opts...) {
+		if err != nil {
+			t.Fatalf("query: %v", err)
+		}
+		switch m := msg.(type) {
+		case *SystemMessage:
+			if m.Subtype == "init" {
+				if err := json.Unmarshal(m.Data, &init); err != nil {
+					t.Fatal(err)
+				}
+			}
+		case *ResultMessage:
+			result = m
+		}
+	}
+	if init == nil || result == nil {
+		t.Fatalf("init=%v result=%v", init != nil, result)
+	}
+	if result.IsError {
+		t.Fatalf("result error: %+v", result)
+	}
+	return init, result
+}
+
+func TestE2ESessionStoreResumeAppliesUserSettings(t *testing.T) {
+	e2eSkip(t)
+	store := NewInMemorySessionStore()
+	cwd := t.TempDir()
+	cfg := callerConfigDir(t)
+	opts := func(extra ...Option) []Option {
+		return append([]Option{
+			WithCwd(cwd),
+			WithSessionStore(store, FlushBatched),
+			WithEnv(map[string]string{"CLAUDE_CONFIG_DIR": cfg}),
+			WithMaxTurns(1),
+		}, extra...)
+	}
+
+	// Seed a session into the store with no user settings present.
+	firstInit, first := runInitAndResult(t, "Reply with exactly: one", opts()...)
+	if firstInit["output_style"] != "default" {
+		t.Fatalf("first output_style = %v", firstInit["output_style"])
+	}
+
+	// Add user settings and drop the on-disk transcript, so the resume can
+	// only succeed through the store, under a different temporary config dir
+	// seeded from this one.
+	if err := os.WriteFile(filepath.Join(cfg, "settings.json"), []byte(`{"outputStyle":"Explanatory"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(filepath.Join(cfg, "projects")); err != nil {
+		t.Fatal(err)
+	}
+
+	resumedInit, resumed := runInitAndResult(t, "Reply with exactly: two", opts(WithResume(first.SessionID))...)
+	if resumed.SessionID != first.SessionID {
+		t.Errorf("did not resume: session %s, want %s", resumed.SessionID, first.SessionID)
+	}
+	if resumedInit["output_style"] != "Explanatory" {
+		t.Errorf("user settings.json not applied on store resume: output_style = %v", resumedInit["output_style"])
+	}
+}
