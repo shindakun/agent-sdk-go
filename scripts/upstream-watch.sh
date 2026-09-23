@@ -5,7 +5,7 @@
 # touching SDK source are classified by Claude and get an individual labeled
 # issue with a port recommendation. Docs/test/example commits are ignored.
 #
-# Untrusted input (commit messages and diffs) is treated strictly as data — see
+# Untrusted input (commit messages and diffs) is treated strictly as data; see
 # the prompt-injection hardening in build_triage_payload / call_claude.
 #
 # Requirements: gh (authed), curl, jq.
@@ -16,7 +16,7 @@
 #   DRY_RUN=1           print actions instead of mutating GitHub / advancing state
 #   MAX_COMMITS         safety cap per run (default 30)
 #   DIFF_BYTE_CAP       max diff bytes sent to Claude (default 60000)
-#   CLAUDE_MODEL        default claude-opus-4-6
+#   CLAUDE_MODEL        default claude-opus-5
 set -euo pipefail
 
 UPSTREAM_REPO="${UPSTREAM_REPO:-anthropics/claude-agent-sdk-python}"
@@ -24,7 +24,7 @@ SELF_REPO="${SELF_REPO:-shindakun/agent-sdk-go}"
 DRY_RUN="${DRY_RUN:-0}"
 MAX_COMMITS="${MAX_COMMITS:-30}"
 DIFF_BYTE_CAP="${DIFF_BYTE_CAP:-60000}"
-CLAUDE_MODEL="${CLAUDE_MODEL:-claude-opus-4-6}"
+CLAUDE_MODEL="${CLAUDE_MODEL:-claude-opus-5}"
 ROLLUP_TITLE="Upstream CLI version bumps"
 
 log() { printf '%s\n' "$*" >&2; }
@@ -42,12 +42,28 @@ gh_vars() {
 	fi
 }
 
+is_sha() { [[ "$1" =~ ^[0-9a-f]{40}$ ]]; }
+
+# A missing variable reads as empty (first run). Anything else that is not a
+# full SHA is corrupt state: fail rather than guess, since restarting from HEAD
+# would silently skip every commit since the last good run.
 get_last_sha() {
-	gh_vars variable get UPSTREAM_LAST_SHA --repo "$SELF_REPO" 2>/dev/null || true
+	local sha
+	sha="$(gh_vars variable get UPSTREAM_LAST_SHA --repo "$SELF_REPO" 2>/dev/null || true)"
+	if [ -n "$sha" ] && ! is_sha "$sha"; then
+		log "ERROR: UPSTREAM_LAST_SHA is not a commit SHA: $sha"
+		log "Reset it to the last upstream commit that was processed."
+		return 1
+	fi
+	printf '%s' "$sha"
 }
 
 set_last_sha() {
 	local sha="$1"
+	if ! is_sha "$sha"; then
+		log "ERROR: refusing to persist non-SHA state: $sha"
+		return 1
+	fi
 	if [ "$DRY_RUN" = "1" ]; then
 		log "[dry-run] would set UPSTREAM_LAST_SHA=$sha"
 		return
@@ -81,16 +97,31 @@ ensure_labels() {
 # --- commit listing ----------------------------------------------------------
 
 # Prints new commit SHAs oldest->newest, since $1 (exclusive). If $1 is empty,
-# prints only the single latest commit.
+# prints only the single latest commit. Fails if the API call fails or returns
+# anything but SHAs: on an HTTP error gh prints the error body to stdout, which
+# must never be mistaken for a commit.
 list_new_commits() {
-	local last="$1"
+	local last="$1" out line
 	if [ -z "$last" ]; then
-		gh api "repos/$UPSTREAM_REPO/commits?per_page=1" --jq '.[0].sha'
-		return
+		out="$(gh api "repos/$UPSTREAM_REPO/commits?per_page=1" --jq '.[0].sha')" || {
+			log "ERROR: listing upstream commits failed"; return 1
+		}
+	else
+		# Compare base...head; .commits is oldest->newest and excludes base.
+		# per_page=250 returns up to 250 commits; more than that is caught by
+		# the total_commits check below.
+		out="$(gh api "repos/$UPSTREAM_REPO/compare/$last...HEAD?per_page=250" \
+			--jq 'if .total_commits > (.commits | length) then error("compare truncated: \(.total_commits) commits") else .commits[].sha end')" || {
+			log "ERROR: comparing $last...HEAD failed"; return 1
+		}
 	fi
-	# Compare base...head; .commits is oldest->newest and excludes base.
-	gh api "repos/$UPSTREAM_REPO/compare/$last...HEAD" \
-		--jq '.commits[].sha' 2>/dev/null || true
+	while IFS= read -r line; do
+		[ -z "$line" ] && continue
+		if ! is_sha "$line"; then
+			log "ERROR: unexpected output from the GitHub API: $line"; return 1
+		fi
+		printf '%s\n' "$line"
+	done <<<"$out"
 }
 
 # --- classification ----------------------------------------------------------
@@ -119,14 +150,16 @@ cli_version_from_commit() {
 	printf '%s' "$ver"
 }
 
-# classify <sha> -> echoes one of: cli-bump | ignore | review
+# classify <sha> -> echoes one of: cli-bump | ignore | review. Fails if the file
+# list can't be fetched; an empty list would otherwise classify as "ignore" and
+# the commit would be skipped for good. (errexit is not inherited inside the
+# command substitution that calls this, so the check has to be explicit.)
 classify() {
-	local sha="$1" subject files
-	subject="$(commit_subject "$sha")"
-	files="$(commit_files "$sha")"
+	local sha="$1" files
+	files="$(commit_files "$sha")" || { log "ERROR: fetching files for $sha failed"; return 1; }
 
 	# A CLI bump MUST touch _cli_version.py. The conventional subject alone is
-	# not enough — and a CHANGELOG-only or release/version commit is NOT a CLI
+	# not enough, and a CHANGELOG-only or release/version commit is NOT a CLI
 	# bump (those are no-ops for the Go port).
 	if printf '%s\n' "$files" | grep -qE '^src/claude_agent_sdk/_cli_version\.py$'; then
 		# If _cli_version.py is the only SDK source touched, it's a clean bump.
@@ -164,7 +197,7 @@ append_cli_bump() {
 	subject="$(commit_subject "$sha")"
 	ver="$(cli_version_from_commit "$sha")"
 	link="https://github.com/$UPSTREAM_REPO/commit/$sha"
-	body="- CLI **${ver:-?}** — [\`${sha:0:7}\`]($link) — $subject
+	body="- CLI **${ver:-?}** · [\`${sha:0:7}\`]($link) · $subject
 
   Action: set \`SupportedCLIVersion\` in \`claude.go\` to \`${ver:-?}\` and re-run the parity audit."
 
@@ -225,9 +258,22 @@ build_triage_payload() {
 		--arg user "$user_block" \
 		'{
 			model: $model,
-			max_tokens: 1024,
+			max_tokens: 16000,
 			system: [ { type:"text", text:$sys, cache_control:{type:"ephemeral"} } ],
-			messages: [ { role:"user", content:$user } ]
+			messages: [ { role:"user", content:$user } ],
+			output_config: { format: { type:"json_schema", schema: {
+				type:"object",
+				properties: {
+					category: { type:"string", enum:["port-needed","maybe","no-op"] },
+					area: { type:"string" },
+					summary: { type:"string" },
+					go_changes: { type:"string" },
+					priority: { type:"string", enum:["high","medium","low"] }
+				},
+				required: ["category","area","summary","go_changes","priority"],
+				additionalProperties: false
+			} } },
+			fallbacks: "default"
 		}'
 }
 
@@ -238,9 +284,19 @@ call_claude() {
 	resp="$(curl -sS https://api.anthropic.com/v1/messages \
 		-H "x-api-key: ${ANTHROPIC_API_KEY:?ANTHROPIC_API_KEY required for triage}" \
 		-H "anthropic-version: 2023-06-01" \
+		-H "anthropic-beta: server-side-fallback-2026-07-01" \
 		-H "content-type: application/json" \
 		--data-binary "$payload")"
-	printf '%s' "$resp" | jq -r '.content[0].text // empty'
+	# The answer is the text block; with thinking on, content[0] is a thinking
+	# block. Log why there is no text (API error, refusal, truncation) instead
+	# of failing silently.
+	local text
+	text="$(printf '%s' "$resp" | jq -r '[.content[]? | select(.type == "text") | .text] | join("")' 2>/dev/null || true)"
+	if [ -z "$text" ]; then
+		log "WARNING: triage returned no text: $(printf '%s' "$resp" \
+			| jq -c '{type, error, stop_reason, stop_details}' 2>/dev/null || printf '%s' "$resp" | head -c 300)"
+	fi
+	printf '%s' "$text"
 }
 
 # normalize_enum <value> <default> <allowed...>
@@ -280,7 +336,7 @@ file_review_issue() {
 
 	category="$(normalize_enum "$category" "maybe" port-needed maybe no-op)"
 	priority="$(normalize_enum "$priority" "medium" high medium low)"
-	[ -z "$summary" ] && summary="(triage produced no summary — review the diff)"
+	[ -z "$summary" ] && summary="(triage produced no summary; review the diff)"
 
 	local title body bodyfile
 	title="Upstream ${sha:0:7}: $(printf '%s' "$subject" | head -c 80)"
@@ -288,10 +344,10 @@ file_review_issue() {
 	{
 		printf 'Upstream commit triage (auto-generated).\n\n'
 		printf -- '- Commit: %s\n' "$link"
-		printf -- '- Diff: %s\n' "$link"
+		printf -- '- Diff: %s.diff\n' "$link"
 		printf -- '- Suggested category: **%s** · priority: **%s** · area: %s\n\n' "$category" "$priority" "${area:-?}"
 		printf '**Summary**\n\n%s\n\n' "$summary"
-		printf '**Recommended Go change**\n\n%s\n\n' "${go_changes:-（none suggested）}"
+		printf '**Recommended Go change**\n\n%s\n\n' "${go_changes:-(none suggested)}"
 		# shellcheck disable=SC2016  # literal markdown code fence, not substitution
 		printf '**Changed files**\n\n```\n%s\n```\n' "$files"
 	} >"$bodyfile"
@@ -316,18 +372,22 @@ main() {
 	local last; last="$(get_last_sha)"
 	log "last processed upstream sha: ${last:-<none>}"
 
-	mapfile -t commits < <(list_new_commits "$last")
+	# Not `mapfile < <(...)`: a process substitution's exit status is ignored,
+	# which would turn a failed listing into "no new commits".
+	local listing; listing="$(list_new_commits "$last")"
+	mapfile -t commits <<<"$listing"
 	if [ "${#commits[@]}" -eq 0 ] || [ -z "${commits[0]:-}" ]; then
 		log "no new commits"; return 0
 	fi
+	# Take the oldest MAX_COMMITS and leave the rest for the next run; state only
+	# advances past what was processed, so a backlog is never dropped.
 	if [ "${#commits[@]}" -gt "$MAX_COMMITS" ]; then
-		log "WARNING: ${#commits[@]} new commits exceed MAX_COMMITS=$MAX_COMMITS; processing the newest $MAX_COMMITS"
-		commits=("${commits[@]: -$MAX_COMMITS}")
+		log "${#commits[@]} new commits exceed MAX_COMMITS=$MAX_COMMITS; processing the oldest $MAX_COMMITS, the rest next run"
+		commits=("${commits[@]:0:$MAX_COMMITS}")
 	fi
 
 	local newest="" sha kind
 	for sha in "${commits[@]}"; do
-		[ -z "$sha" ] && continue
 		kind="$(classify "$sha")"
 		log "commit ${sha:0:7} -> $kind"
 		case "$kind" in
