@@ -152,6 +152,7 @@ Two test tiers run against the real `claude` binary:
 | `test_sdk_mcp_tools.py` | `TestE2ESdkMcpMultipleTools`, `…PermissionEnforcement` |
 | `test_include_partial_messages.py` | `TestE2EPartialMessagesPresentAndAbsent` |
 | `test_stderr_callback.py` | `TestE2EStderrCallback` |
+| `test_forward_subagent_text.py` | `TestE2EForwardSubagentTextDeliversAttributedText`, `TestE2ESubagentTextNotForwardedByDefault` |
 | `test_truncating_resume.py` | `TestE2ETruncatingResumeMatchingDropsTurn`, `TestE2ETruncatingResumeWrongDropsTurnRefused` |
 | `test_error_results.py` | `TestE2EAPIErrorYieldsResultError` |
 | `test_conversation_reset.py` | `TestE2EClearEmitsConversationReset` |

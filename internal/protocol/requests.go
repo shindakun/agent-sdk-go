@@ -15,6 +15,7 @@ type InitializeRequest struct {
 	Agents                 json.RawMessage `json:"agents,omitempty"`
 	Skills                 json.RawMessage `json:"skills,omitempty"`
 	ExcludeDynamicSections *bool           `json:"excludeDynamicSections,omitempty"`
+	ForwardSubagentText    *bool           `json:"forwardSubagentText,omitempty"`
 }
 
 // Initialize performs the handshake and returns the CLI's initialize response.

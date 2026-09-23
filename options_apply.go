@@ -325,6 +325,10 @@ func (o *Options) buildInitializeRequest(reg *callbackRegistry) (protocol.Initia
 		v := true
 		req.ExcludeDynamicSections = &v
 	}
+	if o.forwardSubagentText {
+		v := true
+		req.ForwardSubagentText = &v
+	}
 	return req, nil
 }
 

@@ -63,6 +63,7 @@ type Options struct {
 	agents                 map[string]AgentDefinition
 	skills                 []string
 	excludeDynamicSections bool
+	forwardSubagentText    bool
 	mcpServers             map[string]McpServerConfig
 	mcpConfigRaw           string // a file path or JSON string, passed to --mcp-config directly
 
@@ -465,6 +466,16 @@ func WithAgents(agents map[string]AgentDefinition) Option {
 // WithSkills enables the named skills.
 func WithSkills(skills ...string) Option {
 	return func(o *Options) { o.skills = append(o.skills, skills...) }
+}
+
+// WithForwardSubagentText forwards subagent text and thinking blocks on the
+// stream. By default a subagent spawned with the Agent tool surfaces only its
+// tool_use and tool_result blocks, as [AssistantMessage] and [UserMessage]
+// values whose ParentToolUseID is the spawning Agent call. With this option its
+// text and thinking arrive the same way, so the nested transcript can be
+// rendered in full.
+func WithForwardSubagentText() Option {
+	return func(o *Options) { o.forwardSubagentText = true }
 }
 
 // WithExcludeDynamicSections omits dynamic system-prompt sections.

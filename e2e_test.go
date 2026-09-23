@@ -995,3 +995,85 @@ func TestE2EAPIErrorYieldsResultError(t *testing.T) {
 		t.Errorf("subtype=%q terminal_reason=%q, want the mid-turn API failure shape", re.Subtype, re.TerminalReason)
 	}
 }
+
+// --- Forwarding subagent text (mirrors test_forward_subagent_text.py) ---------
+
+func forwardSubagentRun(t *testing.T, forward bool) (agentIDs map[string]bool, attributed []*AssistantMessage) {
+	t.Helper()
+	opts := isolatedOpts(t.TempDir(),
+		WithAgents(map[string]AgentDefinition{"greeter": {
+			Description: "Replies with a short greeting. Use for greeting tasks.",
+			Prompt:      "Reply with one short friendly sentence. Do not use any tools.",
+			Model:       "haiku",
+		}}),
+		WithAllowedTools("Agent", "Task"),
+		WithMaxTurns(4),
+	)
+	if forward {
+		opts = append(opts, WithForwardSubagentText())
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 240*time.Second)
+	defer cancel()
+	agentIDs = map[string]bool{}
+	var result *ResultMessage
+	for msg, err := range Query(ctx, "Use the Agent tool exactly once with subagent_type 'greeter', prompt "+
+		"'say hi', and run_in_background set to false. Then reply with the single word DONE.", opts...) {
+		if err != nil {
+			t.Fatalf("query: %v", err)
+		}
+		switch m := msg.(type) {
+		case *AssistantMessage:
+			if m.ParentToolUseID != "" {
+				attributed = append(attributed, m)
+				continue
+			}
+			for _, b := range m.Content {
+				if tu, ok := b.(*ToolUseBlock); ok && (tu.Name == "Agent" || tu.Name == "Task") {
+					agentIDs[tu.ID] = true
+				}
+			}
+		case *ResultMessage:
+			result = m
+		}
+	}
+	if result == nil || result.IsError || len(agentIDs) == 0 {
+		t.Fatalf("run failed or never called the Agent tool: %+v, agent calls %v", result, agentIDs)
+	}
+	return agentIDs, attributed
+}
+
+func hasText(m *AssistantMessage) bool {
+	for _, b := range m.Content {
+		if _, ok := b.(*TextBlock); ok {
+			return true
+		}
+	}
+	return false
+}
+
+func TestE2EForwardSubagentTextDeliversAttributedText(t *testing.T) {
+	e2eSkip(t)
+	ids, attributed := forwardSubagentRun(t, true)
+	n := 0
+	for _, m := range attributed {
+		if hasText(m) {
+			n++
+			if !ids[m.ParentToolUseID] {
+				t.Errorf("text attributed to %q, not an Agent call %v", m.ParentToolUseID, ids)
+			}
+		}
+	}
+	if n == 0 {
+		t.Error("no subagent text message with ParentToolUseID set")
+	}
+}
+
+func TestE2ESubagentTextNotForwardedByDefault(t *testing.T) {
+	e2eSkip(t)
+	_, attributed := forwardSubagentRun(t, false)
+	for _, m := range attributed {
+		if hasText(m) {
+			t.Errorf("subagent text forwarded without the option: %+v", m.Content)
+		}
+	}
+}

@@ -43,6 +43,9 @@ All notable changes to this project are documented here. The format is based on
   result text, terminal reason, API status, and raw payload. Its message is the
   real cause (for an API failure, the "API Error: ..." prose), and it unwraps
   to a `*ProcessError`. Ports upstream `90ab957`.
+- **`WithForwardSubagentText`** asks the CLI (via initialize) to forward a
+  subagent's text and thinking blocks, attributed by `ParentToolUseID`, not
+  only its tool calls. Ports upstream `c97420c`.
 - **`WithResumeSessionAt` / `WithResumeDropsTurn`** for a truncating resume:
   resume up to a transcript entry, optionally declaring the turn being
   discarded so the CLI refuses the resume if anything else would be lost.
