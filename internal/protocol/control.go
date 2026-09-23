@@ -5,7 +5,9 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -47,6 +49,14 @@ type Engine struct {
 	// engine dropping them.
 	onMirror func([]byte)
 
+	// onExit, when set, is called once stdout ends with the last message if it
+	// was a result with is_error (else nil). The error it returns fails pending
+	// control requests and is delivered on Messages before EOF.
+	onExit func(lastErrorResult []byte) error
+	// lastErrorResult is the most recent message line if it was an error
+	// result. Only the read loop touches it.
+	lastErrorResult []byte
+
 	startOnce sync.Once
 	closed    atomic.Bool
 	// handlers tracks in-flight inbound-request goroutines so Close can wait
@@ -57,6 +67,13 @@ type Engine struct {
 // SetMirrorSink registers a callback to receive transcript_mirror frames. It
 // must be called before [Engine.Start].
 func (e *Engine) SetMirrorSink(fn func([]byte)) { e.onMirror = fn }
+
+// SetExitHandler registers the callback that turns the end of the CLI's output
+// into an error (see the onExit field). It must be called before [Engine.Start].
+func (e *Engine) SetExitHandler(fn func(lastErrorResult []byte) error) { e.onExit = fn }
+
+// Closed reports whether [Engine.Close] has been called.
+func (e *Engine) Closed() bool { return e.closed.Load() }
 
 // MessageLine is a non-control stream-json line forwarded to the consumer, or a
 // terminal error/EOF.
@@ -93,15 +110,52 @@ func (e *Engine) Start() {
 
 func (e *Engine) readLoop() {
 	defer close(e.msgCh)
+	sawEOF := false
 	for line := range e.t.Read() {
+		if errors.Is(line.Err, io.EOF) {
+			// The final line by the Transport contract.
+			sawEOF = true
+			break
+		}
 		if line.Err != nil {
 			e.msgCh <- MessageLine{Err: line.Err}
-			// Continue draining; io.EOF is terminal and the channel will close.
 			continue
 		}
 		e.dispatch(line.Data)
 	}
-	e.failPending(fmt.Errorf("protocol: connection closed"))
+	// Output has ended. A non-zero exit, and especially one that follows an
+	// error result, explains itself better than "connection closed": pending
+	// requests (such as an initialize the CLI never answered) and the message
+	// stream both get that error.
+	var exitErr error
+	if e.onExit != nil {
+		exitErr = e.onExit(e.lastErrorResult)
+	}
+	if exitErr != nil {
+		e.failPending(exitErr)
+		e.msgCh <- MessageLine{Err: exitErr}
+	} else {
+		e.failPending(fmt.Errorf("protocol: connection closed"))
+	}
+	if sawEOF {
+		e.msgCh <- MessageLine{Err: io.EOF}
+	}
+}
+
+// trackErrorResult records line if it is a result with is_error, and clears
+// the record for any other message, so only an error result that is the last
+// message before exit counts.
+func (e *Engine) trackErrorResult(typ string, line []byte) {
+	e.lastErrorResult = nil
+	if typ != "result" {
+		return
+	}
+	var r struct {
+		IsError bool `json:"is_error"`
+	}
+	if json.Unmarshal(line, &r) == nil && r.IsError {
+		e.lastErrorResult = append([]byte(nil), line...)
+	}
 }
 
 func (e *Engine) dispatch(line []byte) {
@@ -127,6 +181,7 @@ func (e *Engine) dispatch(line []byte) {
 			e.onMirror(append([]byte(nil), line...))
 		}
 	default:
+		e.trackErrorResult(typ, line)
 		e.msgCh <- MessageLine{Data: append([]byte(nil), line...)}
 	}
 }

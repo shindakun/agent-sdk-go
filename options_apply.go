@@ -146,6 +146,18 @@ func (o *Options) buildArgs() ([]string, error) {
 		}
 		args = append(args, "--resume="+o.resume)
 	}
+	if o.resumeSessionAt != "" {
+		if err := rejectWindowsCmdMetacharacters("resumeSessionAt", o.resumeSessionAt); err != nil {
+			return nil, err
+		}
+		args = append(args, "--resume-session-at="+o.resumeSessionAt)
+	}
+	if o.resumeDropsTurn != nil {
+		if err := rejectWindowsCmdMetacharacters("resumeDropsTurn", *o.resumeDropsTurn); err != nil {
+			return nil, err
+		}
+		args = append(args, "--resume-drops-turn="+*o.resumeDropsTurn)
+	}
 	if o.forkSession {
 		args = append(args, "--fork-session")
 	}

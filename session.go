@@ -133,11 +133,16 @@ func (s *session) connect(ctx context.Context) (err error) {
 		s.engine.SetMirrorSink(s.mirror.enqueue)
 	}
 
+	s.engine.SetExitHandler(s.exitError)
 	s.engine.Start()
 
 	initResult, err := s.engine.Initialize(ctx, init, initializeTimeout())
 	if err != nil {
 		_ = s.t.Close()
+		var pe *ProcessError
+		if errors.As(err, &pe) {
+			return err
+		}
 		return &ConnectionError{Err: err}
 	}
 	s.initResult = initResult
@@ -248,6 +253,40 @@ func (s *session) close() error {
 	return err
 }
 
+// exitWaitTimeout bounds how long the end of the CLI's output waits for the
+// process to exit before giving up on its status.
+const exitWaitTimeout = 10 * time.Second
+
+// exitError is the engine's exit handler: once the CLI's output ends, it
+// returns the process's non-zero exit as a *ResultError when the last message
+// was an error result (as the official SDK raises), a *ProcessError otherwise,
+// or nil for a clean exit or a shutdown the SDK started.
+func (s *session) exitError(lastErrorResult []byte) error {
+	w, ok := s.t.(interface{ Wait() error })
+	if !ok || s.engine.Closed() {
+		return nil
+	}
+	done := make(chan error, 1)
+	go func() { done <- w.Wait() }()
+	var err error
+	select {
+	case err = <-done:
+	case <-time.After(exitWaitTimeout):
+		return nil
+	}
+	if s.engine.Closed() {
+		return nil
+	}
+	var pe *ProcessError
+	if !errors.As(mapTransportError(err), &pe) {
+		return nil
+	}
+	if lastErrorResult != nil {
+		return newResultError(lastErrorResult, pe.ExitCode)
+	}
+	return pe
+}
+
 // initializeTimeout bounds the initialize handshake: 60s, or longer when
 // CLAUDE_CODE_STREAM_CLOSE_TIMEOUT (milliseconds) asks for more, as the
 // official SDK computes it.
@@ -286,6 +325,10 @@ func decodeMessageLine(line protocol.MessageLine) (Message, error) {
 	if line.Err != nil {
 		if errors.Is(line.Err, io.EOF) {
 			return nil, io.EOF
+		}
+		var pe *ProcessError
+		if errors.As(line.Err, &pe) {
+			return nil, line.Err
 		}
 		return nil, &ConnectionError{Err: line.Err}
 	}

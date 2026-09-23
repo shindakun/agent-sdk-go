@@ -46,6 +46,8 @@ type Options struct {
 	permissionMode           PermissionMode
 	permissionPromptToolName string
 	resume                   string
+	resumeSessionAt          string
+	resumeDropsTurn          *string
 	forkSession              bool
 	continueConversation     bool
 	includePartialMessages   bool
@@ -201,6 +203,31 @@ func WithPermissionMode(mode PermissionMode) Option {
 // WithResume resumes a prior session by ID.
 func WithResume(sessionID string) Option {
 	return func(o *Options) { o.resume = sessionID }
+}
+
+// WithResumeSessionAt resumes only up to and including the transcript entry
+// with this UUID. Use it with [WithResume] (usually also [WithForkSession]) to
+// branch from an earlier point. It accepts any transcript-entry UUID, such as
+// an [AssistantMessage] UUID seen live or a [SessionMessage] UUID from
+// [GetSessionMessages]. See [WithResumeDropsTurn] for choosing the point.
+func WithResumeSessionAt(uuid string) Option {
+	return func(o *Options) { o.resumeSessionAt = uuid }
+}
+
+// WithResumeDropsTurn, with [WithResumeSessionAt], names the user prompt whose
+// turn the truncating resume means to discard. The CLI then checks that every
+// transcript entry after the truncation point belongs to that turn, and
+// refuses the resume otherwise (for example when the discarded range holds a
+// queued message or task notification the caller never saw). A refusal fails
+// the connect with a [*ResultError] whose message contains
+// "Resume rejected by --resume-drops-turn:". Treat it as final: clear the
+// fork target and resume plainly rather than retrying.
+//
+// Set WithResumeSessionAt to the last entry of the turn you keep, and this to
+// the prompt UUID of the turn right after it. An empty uuid is still sent, so
+// the CLI rejects it as malformed rather than the check being silently off.
+func WithResumeDropsTurn(uuid string) Option {
+	return func(o *Options) { o.resumeDropsTurn = &uuid }
 }
 
 // WithForkSession forks the resumed session (when combined with WithResume)

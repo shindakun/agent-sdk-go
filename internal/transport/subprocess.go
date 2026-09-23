@@ -43,6 +43,9 @@ type subprocessTransport struct {
 
 	closeOnce sync.Once
 	closeErr  error
+
+	waitOnce sync.Once
+	waitErr  error
 }
 
 // New creates a subprocess transport from cfg.
@@ -281,23 +284,35 @@ func (t *subprocessTransport) Close() error {
 		}
 		t.writeMu.Unlock()
 
-		// Wait for the read/stderr pumps to drain.
-		t.wg.Wait()
-
-		if t.cmd != nil {
-			err := t.cmd.Wait()
-			if err != nil {
-				var exitErr *exec.ExitError
-				if errors.As(err, &exitErr) {
-					t.closeErr = &ProcessError{
-						ExitCode: exitErr.ExitCode(),
-						Stderr:   t.capturedStderr(),
-					}
-				} else {
-					t.closeErr = err
-				}
-			}
-		}
+		t.closeErr = t.Wait()
 	})
 	return t.closeErr
+}
+
+// Wait waits for the subprocess to exit and returns its exit status as a
+// *ProcessError for a non-zero exit. It first waits for the read and stderr
+// pumps to drain, since exec.Cmd.Wait closes the pipes they read. It does not
+// close stdin, so call it only once stdout has ended (or after EndInput).
+// Safe to call more than once and concurrently with Close.
+func (t *subprocessTransport) Wait() error {
+	t.waitOnce.Do(func() {
+		t.wg.Wait()
+		if t.cmd == nil {
+			return
+		}
+		err := t.cmd.Wait()
+		if err == nil {
+			return
+		}
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			t.waitErr = &ProcessError{
+				ExitCode: exitErr.ExitCode(),
+				Stderr:   t.capturedStderr(),
+			}
+			return
+		}
+		t.waitErr = err
+	})
+	return t.waitErr
 }

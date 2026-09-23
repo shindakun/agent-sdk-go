@@ -13,6 +13,7 @@ package claude
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -303,9 +304,12 @@ func TestE2ESdkMcpPermissionEnforcement(t *testing.T) {
 	deny := func(ctx context.Context, tool string, input json.RawMessage, pc PermissionContext) (PermissionResult, error) {
 		return PermissionDeny{Message: "denied in test"}, nil
 	}
+	// No settings files: a user settings defaultMode such as auto would approve
+	// the call before the callback is asked.
 	for _, err := range Query(ctx, "Use the add tool to compute 2 + 2.",
 		WithSDKMCPServer("calc", srv),
 		WithCanUseTool(deny),
+		WithSettingSources(),
 	) {
 		if err != nil {
 			t.Fatalf("query: %v", err)
@@ -379,6 +383,8 @@ func TestE2EPluginLoaded(t *testing.T) {
 	for msg, err := range Query(ctx, "Hello!",
 		WithPlugins(SdkPluginConfig{Type: "local", Path: pluginPath}),
 		WithMaxTurns(1),
+		// No settings files: user hooks can add a turn past WithMaxTurns(1).
+		WithSettingSources(),
 	) {
 		if err != nil {
 			t.Fatalf("query: %v", err)
@@ -817,5 +823,175 @@ func TestE2EResultOriginRoundTrip(t *testing.T) {
 	}
 	if r2.Origin != nil {
 		t.Errorf("unstamped turn origin = %+v", r2.Origin)
+	}
+}
+
+// --- Truncating resume (mirrors test_truncating_resume.py) --------------------
+
+const (
+	truncTurn1 = "Reply with exactly: one"
+	truncTurn2 = "Reply with exactly: two"
+	truncTurn3 = "Reply with exactly: three"
+)
+
+// isolatedOpts loads no settings files, matching upstream's CI, where no user
+// hooks add turns past WithMaxTurns(1).
+func isolatedOpts(cwd string, extra ...Option) []Option {
+	return append([]Option{WithCwd(cwd), WithMaxTurns(1), WithSettingSources()}, extra...)
+}
+
+// userPrompts returns the string prompts of a session's user entries, in order.
+func userPrompts(t *testing.T, sessionID, cwd string) []string {
+	t.Helper()
+	msgs, err := GetSessionMessages(sessionID, cwd, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for _, m := range msgs {
+		var body struct {
+			Content json.RawMessage `json:"content"`
+		}
+		var s string
+		if m.Type == "user" && json.Unmarshal(m.Message, &body) == nil && json.Unmarshal(body.Content, &s) == nil {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// twoTurnSession returns the session id, the last entry of turn 1, and the
+// prompt UUID of turn 2.
+func twoTurnSession(t *testing.T, cwd string) (sessionID, keepAt, turn2Prompt string) {
+	t.Helper()
+	ctx, cancel := e2eCtx(t)
+	defer cancel()
+	c := NewClient(isolatedOpts(cwd)...)
+	if err := c.Connect(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var seen []Message
+	if err := c.Query(ctx, truncTurn1); err != nil {
+		t.Fatal(err)
+	}
+	r1 := receiveResult(t, ctx, c, &seen)
+	if err := c.Query(ctx, truncTurn2); err != nil {
+		t.Fatal(err)
+	}
+	r2 := receiveResult(t, ctx, c, nil)
+	_ = c.Close()
+	if r1.IsError || r2.IsError {
+		t.Fatalf("setup turns failed: %+v %+v", r1, r2)
+	}
+	for _, m := range seen {
+		if a, ok := m.(*AssistantMessage); ok && a.UUID != "" {
+			keepAt = a.UUID
+		}
+	}
+	sessionID = r2.SessionID
+
+	msgs, err := GetSessionMessages(sessionID, cwd, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, m := range msgs {
+		if m.UUID != keepAt {
+			continue
+		}
+		if i+1 >= len(msgs) || msgs[i+1].Type != "user" {
+			t.Fatalf("turn 2 prompt does not follow turn 1's last entry: %+v", msgs)
+		}
+		return sessionID, keepAt, msgs[i+1].UUID
+	}
+	t.Fatalf("turn 1 assistant %s not in transcript", keepAt)
+	return
+}
+
+func TestE2ETruncatingResumeMatchingDropsTurn(t *testing.T) {
+	e2eSkip(t)
+	cwd := t.TempDir()
+	sid, keepAt, turn2 := twoTurnSession(t, cwd)
+
+	r := runToResult(t, truncTurn3, isolatedOpts(cwd,
+		WithResume(sid), WithForkSession(), WithResumeSessionAt(keepAt), WithResumeDropsTurn(turn2))...)
+	if r.IsError || r.SessionID == sid {
+		t.Fatalf("fork result = %+v", r)
+	}
+	if got := userPrompts(t, r.SessionID, cwd); strings.Join(got, "|") != truncTurn1+"|"+truncTurn3 {
+		t.Errorf("forked prompts = %q, want turn 2 dropped", got)
+	}
+	if got := userPrompts(t, sid, cwd); strings.Join(got, "|") != truncTurn1+"|"+truncTurn2 {
+		t.Errorf("source prompts = %q, want it untouched", got)
+	}
+}
+
+func TestE2ETruncatingResumeWrongDropsTurnRefused(t *testing.T) {
+	e2eSkip(t)
+	cwd := t.TempDir()
+	sid, keepAt, _ := twoTurnSession(t, cwd)
+
+	ctx, cancel := e2eCtx(t)
+	defer cancel()
+	var got error
+	for _, err := range Query(ctx, truncTurn3, isolatedOpts(cwd,
+		WithResume(sid), WithForkSession(), WithResumeSessionAt(keepAt),
+		WithResumeDropsTurn("00000000-0000-4000-8000-000000000000"))...) {
+		if err != nil {
+			got = err
+		}
+	}
+	var pe *ProcessError
+	if !errors.As(got, &pe) || !strings.Contains(fmt.Sprint(got), "Resume rejected by --resume-drops-turn:") {
+		t.Fatalf("err = %v, want a ProcessError carrying the refusal", got)
+	}
+	if prompts := userPrompts(t, sid, cwd); strings.Join(prompts, "|") != truncTurn1+"|"+truncTurn2 {
+		t.Errorf("source prompts = %q, want nothing appended", prompts)
+	}
+}
+
+// --- Error results (mirrors test_error_results.py) ---------------------------
+
+func TestE2EAPIErrorYieldsResultError(t *testing.T) {
+	e2eSkip(t)
+	ctx, cancel := e2eCtx(t)
+	defer cancel()
+	var (
+		result *ResultMessage
+		got    error
+	)
+	for msg, err := range Query(ctx, "Reply with: pong", isolatedOpts(t.TempDir(),
+		WithModel("claude-nonexistent-model-for-sdk-e2e"))...) {
+		if err != nil {
+			got = err
+			break
+		}
+		if r, ok := msg.(*ResultMessage); ok {
+			result = r
+		}
+	}
+	if result == nil || !result.IsError {
+		t.Fatalf("the error result was not delivered first: %+v", result)
+	}
+	var re *ResultError
+	if !errors.As(got, &re) {
+		t.Fatalf("err = %T %v, want a *ResultError", got, got)
+	}
+	var pe *ProcessError
+	if !errors.As(got, &pe) {
+		t.Error("ResultError does not unwrap to ProcessError")
+	}
+	if strings.Contains(re.Error(), "error result: success") || !strings.Contains(re.Error(), strings.TrimSpace(result.Result)) {
+		t.Errorf("text = %q, result = %q", re.Error(), result.Result)
+	}
+	var raw struct {
+		UUID string `json:"uuid"`
+	}
+	_ = json.Unmarshal(re.Data, &raw)
+	if re.Subtype != result.Subtype || re.Result != result.Result || re.SessionID != result.SessionID ||
+		re.TerminalReason != result.TerminalReason || raw.UUID != result.UUID {
+		t.Errorf("payload %+v does not match result %+v", re, result)
+	}
+	if re.Subtype != "success" || re.TerminalReason != "api_error" {
+		t.Errorf("subtype=%q terminal_reason=%q, want the mid-turn API failure shape", re.Subtype, re.TerminalReason)
 	}
 }

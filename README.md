@@ -209,8 +209,19 @@ as background-task notifications. Content blocks:
 ## Error handling
 
 Errors are typed values — use `errors.As`: `CLINotFoundError`, `ProcessError`,
-`ConnectionError`, `JSONDecodeError`, `MessageParseError`, `ControlProtocolError`,
-and the `ErrClosed` sentinel.
+`ResultError`, `ConnectionError`, `JSONDecodeError`, `MessageParseError`,
+`ControlProtocolError`, and the `ErrClosed` sentinel.
+
+When a run fails, the CLI sends a `ResultMessage` with `IsError` set and exits
+non-zero. The stream then ends with a `*ResultError` carrying that result's
+payload, so you can branch on why it failed. It unwraps to a `*ProcessError`.
+
+```go
+var re *claude.ResultError
+if errors.As(err, &re) {
+	log.Printf("run failed: subtype=%s reason=%s: %s", re.Subtype, re.TerminalReason, re.Message)
+}
+```
 
 ## Sessions
 

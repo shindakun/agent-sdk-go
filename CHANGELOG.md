@@ -38,8 +38,25 @@ All notable changes to this project are documented here. The format is based on
   absent; `Raw` keeps keys this version does not model. Ports upstream
   `d48fa33`.
 
+- **`ResultError`.** When the CLI exits after a terminal error result, the
+  stream ends with a `*ResultError` carrying the result's subtype, errors,
+  result text, terminal reason, API status, and raw payload. Its message is the
+  real cause (for an API failure, the "API Error: ..." prose), and it unwraps
+  to a `*ProcessError`. Ports upstream `90ab957`.
+- **`WithResumeSessionAt` / `WithResumeDropsTurn`** for a truncating resume:
+  resume up to a transcript entry, optionally declaring the turn being
+  discarded so the CLI refuses the resume if anything else would be lost.
+  Ports upstream `be2d0df`.
+
 ### Changed
 
+- **Behavior: a non-zero CLI exit now ends the stream with an error.** `Query`
+  and `Client` delivered the error result and then ended silently; the exit
+  status was only visible from `Client.Close`. The stream now ends with a
+  `*ResultError` after an error result, or a `*ProcessError` for any other
+  non-zero exit, as upstream raises them. A connect that the CLI rejects before
+  answering initialize (a refused or impossible resume) returns the same typed
+  error with the CLI's text, instead of "connection closed".
 - **Breaking: `WithLoadTimeout` bounds SessionStore calls during resume**, as
   upstream's `load_timeout_ms` does, instead of the initialize handshake. The
   handshake timeout is 60s, or longer when `CLAUDE_CODE_STREAM_CLOSE_TIMEOUT`
