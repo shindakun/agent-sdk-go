@@ -33,6 +33,7 @@ type Options struct {
 	model                    string
 	fallbackModel            string
 	systemPrompt             systemPromptConfig
+	systemPromptSnapshot     *bool
 	allowedTools             []string
 	disallowedTools          []string
 	maxTurns                 int
@@ -131,6 +132,20 @@ func WithAppendSystemPrompt(prompt string) Option {
 	return func(o *Options) {
 		o.systemPrompt = systemPromptConfig{mode: systemPromptAppend, text: prompt}
 	}
+}
+
+// WithSystemPromptSnapshot sets whether the session keeps the system prompt it
+// recorded on its first request. It applies to [WithSystemPrompt] and
+// [WithAppendSystemPrompt]. With keep true (the CLI default, except in bare
+// mode), every later request, including after a resume, sends the recorded
+// prompt, so a changed prompt has no effect until the session is compacted or
+// a new one starts. With keep false the prompt is rebuilt on every request,
+// for example while iterating on its wording across resumes of one session.
+//
+// Requires Claude Code 2.1.257 or later. Before 2.1.265, a session with an
+// appended or custom prompt recorded it only when keep was true.
+func WithSystemPromptSnapshot(keep bool) Option {
+	return func(o *Options) { o.systemPromptSnapshot = &keep }
 }
 
 // WithSystemPromptFile loads the system prompt from the file at path (maps to

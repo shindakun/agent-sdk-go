@@ -329,6 +329,12 @@ func (o *Options) buildInitializeRequest(reg *callbackRegistry) (protocol.Initia
 		v := true
 		req.ForwardSubagentText = &v
 	}
+	// The snapshot setting belongs to a custom or preset (append) prompt.
+	if o.systemPromptSnapshot != nil &&
+		(o.systemPrompt.mode == systemPromptReplace || o.systemPrompt.mode == systemPromptAppend) {
+		v := *o.systemPromptSnapshot
+		req.SystemPromptSnapshot = &v
+	}
 	return req, nil
 }
 

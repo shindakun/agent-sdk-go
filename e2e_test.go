@@ -1077,3 +1077,34 @@ func TestE2ESubagentTextNotForwardedByDefault(t *testing.T) {
 		}
 	}
 }
+
+// --- System prompt snapshot (behavior documented on upstream's
+// SystemPromptPreset.snapshot; upstream has no e2e test) ----------------------
+
+func TestE2ESystemPromptSnapshot(t *testing.T) {
+	e2eSkip(t)
+	prompt := func(word string) Option {
+		return WithSystemPrompt("Your secret word is " + word + ". When asked for your word, reply with only that word.")
+	}
+	ask := "What is your word?"
+	for _, tc := range []struct {
+		name string
+		keep []Option
+		want string
+	}{
+		{"default keeps the recorded prompt", nil, "ALPHA"},
+		{"rebuild uses the new prompt", []Option{WithSystemPromptSnapshot(false)}, "BETA"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cwd := t.TempDir()
+			first := runToResult(t, ask, append(isolatedOpts(cwd, prompt("ALPHA")), tc.keep...)...)
+			if first.IsError || !strings.Contains(first.Result, "ALPHA") {
+				t.Fatalf("first turn = %+v", first)
+			}
+			resumed := runToResult(t, ask, append(isolatedOpts(cwd, prompt("BETA"), WithResume(first.SessionID)), tc.keep...)...)
+			if !strings.Contains(resumed.Result, tc.want) {
+				t.Errorf("resumed answer = %q, want %s", resumed.Result, tc.want)
+			}
+		})
+	}
+}

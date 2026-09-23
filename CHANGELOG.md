@@ -43,6 +43,10 @@ All notable changes to this project are documented here. The format is based on
   result text, terminal reason, API status, and raw payload. Its message is the
   real cause (for an API failure, the "API Error: ..." prose), and it unwraps
   to a `*ProcessError`. Ports upstream `90ab957`.
+- **`WithSystemPromptSnapshot`** sets whether a session keeps the system
+  prompt it recorded on its first request (the CLI default) or rebuilds it on
+  every request, so a changed `WithSystemPrompt` / `WithAppendSystemPrompt`
+  applies on resume. Requires Claude Code 2.1.257+. Ports upstream `e773e44`.
 - **`WithForwardSubagentText`** asks the CLI (via initialize) to forward a
   subagent's text and thinking blocks, attributed by `ParentToolUseID`, not
   only its tool calls. Ports upstream `c97420c`.

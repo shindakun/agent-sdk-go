@@ -45,6 +45,11 @@ Notable wire details verified against the source:
   extracts `<command-name>`.
 - One-shot `Query` closes stdin after the prompt (immediately, or after the first
   result when SDK MCP/hooks/CanUseTool are configured) so the CLI exits.
+- `system_prompt` forms: a string or `{"type": "custom"}` is `WithSystemPrompt`,
+  `{"type": "preset", "append": ...}` is `WithAppendSystemPrompt`, `{"type":
+  "file"}` is `WithSystemPromptFile`. Their `snapshot` key is
+  `WithSystemPromptSnapshot`, sent as `systemPromptSnapshot` in initialize for
+  the custom and preset forms only.
 - `verbatim_prompts` is SDK-side, not a CLI flag: `WithVerbatimPrompts` adds
   `"client_composed": true` to each user frame.
 - `setting_sources=None` sends no flag; `setting_sources=[]` sends
