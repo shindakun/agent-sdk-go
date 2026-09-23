@@ -135,9 +135,8 @@ Session reading is disk-based: it reads the CLI's
 `<id>/subagents/**/agent-<id>.jsonl` subagent transcripts directly, with the
 official SDK's path resolution (realpath, `CLAUDE_CONFIG_DIR`, non-alphanumeric
 → `-`, djb2/base-36 hash suffix past 200 bytes, worktree lookup) and chain
-building. No running CLI is required. Upstream also NFC-normalizes paths and
-NFKC-normalizes tags; that needs Unicode tables outside Go's standard library
-and is not done.
+building. No running CLI is required. See Known differences for Unicode
+normalization.
 
 In-process MCP servers: upstream serves them with the Python mcp library; the
 Go dispatch reproduces that wire behavior (version negotiation, capabilities,
@@ -192,6 +191,33 @@ Two test tiers run against the real `claude` binary:
 Plugin note: a plugin's commands are **auto-discovered** from its `commands/`
 directory — `plugin.json` does not list them. The loaded plugin appears in the
 init `SystemMessage.Plugins` list.
+
+## Known differences
+
+Behavior that differs from the official SDK, with the reason:
+
+- **Unicode normalization.** Upstream NFC-normalizes directory paths before
+  deriving project keys, and NFKC-normalizes session tags. Both need Unicode
+  tables outside Go's standard library (`golang.org/x/text`), which this module
+  does not depend on. Paths stored in decomposed form (macOS HFS+) can key
+  differently, and tags keep compatibility characters (a full-width `Ａ` stays
+  as is). Format, private-use, and unassigned characters are still stripped
+  from tags.
+- **Session id of string prompts.** `Client.Query` sends the session id the CLI
+  reported in its init message, falling back to `"default"`; upstream's
+  `client.query` sends `"default"` unless given one. `Client.QuerySession` with
+  an explicit id and the streamed `QueryMessages` match upstream.
+- **`WithLoadTimeout(0)`** uses the 60-second default; upstream's
+  `load_timeout_ms=0` times out at once.
+- **Tool result content.** In-process tools return typed blocks, so only text
+  (`TextBlock`) and images (`ImageBlock`) reach the CLI. Upstream also accepts
+  `resource_link` and text `resource` items and converts them to text; in Go,
+  return that text directly. Other block types are dropped, with a warning on
+  the `WithStderr` writer, as upstream drops unknown items.
+- **Resume settings with overflowing numbers.** When a user `settings.json`
+  holds a number like `1e999` and needs keys removed, upstream copies the file
+  unchanged (Python cannot re-encode it); Go removes the keys and keeps the
+  number as written.
 
 ## Not applicable
 
