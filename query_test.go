@@ -218,6 +218,38 @@ func TestCanUseToolSetsPermissionPromptToolStdio(t *testing.T) {
 	}
 }
 
+// A CanUseTool callback alone must hold stdin open until the result: the CLI
+// sends can_use_tool as a control request and blocks on the reply, so closing
+// stdin after the prompt fails the permission check with "Stream closed".
+func TestCanUseToolAloneKeepsStdinOpenUntilResult(t *testing.T) {
+	st := newScriptedTransport(
+		[]byte(`{"type":"system","subtype":"init","session_id":"s1","tools":["Write"]}`),
+		[]byte(`{"type":"result","subtype":"success","is_error":false,"result":"ok","session_id":"s1"}`),
+	)
+	restore := installScriptedTransport(st)
+	defer restore()
+
+	beforeResult := -1
+	for msg, err := range Query(context.Background(), "go",
+		WithCanUseTool(func(ctx context.Context, tool string, in json.RawMessage, pc PermissionContext) (PermissionResult, error) {
+			return PermissionAllow{}, nil
+		}),
+	) {
+		if err != nil {
+			t.Fatalf("query err: %v", err)
+		}
+		if _, ok := msg.(*SystemMessage); ok {
+			beforeResult = st.endInputCount()
+		}
+	}
+	if beforeResult != 0 {
+		t.Errorf("stdin closed before the result (%d EndInput calls)", beforeResult)
+	}
+	if st.endInputCount() == 0 {
+		t.Error("stdin never closed after the result")
+	}
+}
+
 func TestCanUseToolAndPromptToolNameMutuallyExclusive(t *testing.T) {
 	o := newOptions(
 		WithCanUseTool(func(ctx context.Context, tool string, in json.RawMessage, pc PermissionContext) (PermissionResult, error) {

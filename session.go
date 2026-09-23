@@ -182,7 +182,8 @@ func (s *session) endInput() error {
 }
 
 // needsBidirectional reports whether the session requires stdin to stay open
-// after the prompt for control-protocol traffic (SDK MCP servers or hooks).
+// after the prompt for control-protocol traffic (SDK MCP servers, hooks, or a
+// CanUseTool callback).
 func (s *session) needsBidirectional() bool {
 	return len(s.opts.sdkMcpServers()) > 0 || len(s.registry.hooks) > 0 || s.opts.canUseTool != nil
 }

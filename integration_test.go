@@ -12,7 +12,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -211,6 +215,7 @@ func TestIntegrationCanUseToolDeny(t *testing.T) {
 	for msg, err := range Query(ctx,
 		"Create the file /tmp/agent_sdk_go_perm_test.txt with the word hi using the Write tool.",
 		WithCanUseTool(cb),
+		WithPermissionMode(PermissionDefault),
 	) {
 		if err != nil {
 			t.Fatalf("query error: %v", err)
@@ -220,13 +225,71 @@ func TestIntegrationCanUseToolDeny(t *testing.T) {
 		}
 	}
 	if result == nil {
-		t.Fatal("no result message — the CanUseTool turn did not complete")
+		t.Fatal("no result message: the CanUseTool turn did not complete")
 	}
 	if consulted.Load() {
 		t.Logf("CanUseTool was consulted and denied (deny path exercised)")
 	} else {
 		t.Logf("CLI did not route any tool to can_use_tool (CLI %s auto-approved); "+
 			"flag wiring verified, callback dispatch covered by unit tests", cliVersion())
+	}
+}
+
+// TestIntegrationCanUseToolOnlyStringPrompt runs a one-shot string prompt with
+// CanUseTool as the only control-protocol consumer. The target is outside the
+// working directory and /tmp so no allow rule approves it, and the permission
+// mode is pinned so a user settings defaultMode (such as auto) cannot approve it
+// either: the Write must round trip through the callback, which only works if
+// stdin stays open for the reply.
+func TestIntegrationCanUseToolOnlyStringPrompt(t *testing.T) {
+	skipIfNoCLI(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(home, fmt.Sprintf(".agent_sdk_go_permission_it_%d.txt", time.Now().UnixNano()))
+	defer os.Remove(path)
+
+	var mu sync.Mutex
+	var calls []string
+	cb := func(ctx context.Context, tool string, input json.RawMessage, pc PermissionContext) (PermissionResult, error) {
+		mu.Lock()
+		calls = append(calls, tool)
+		mu.Unlock()
+		return PermissionAllow{}, nil
+	}
+
+	var result *ResultMessage
+	for msg, err := range Query(ctx,
+		"Use the Write tool to create the file "+path+" containing exactly the text hello. Do not use any other tool.",
+		WithCanUseTool(cb),
+		WithDisallowedTools("Bash"),
+		WithPermissionMode(PermissionDefault),
+		WithMaxTurns(3),
+	) {
+		if err != nil {
+			t.Fatalf("query error: %v", err)
+		}
+		if rm, ok := msg.(*ResultMessage); ok {
+			result = rm
+		}
+	}
+	if result == nil {
+		t.Fatal("no result message")
+	}
+	if result.IsError {
+		t.Fatalf("run failed: %+v", result)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if !slices.Contains(calls, "Write") {
+		t.Errorf("CanUseTool was not invoked for Write; calls=%v", calls)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("the permitted Write did not run: %v", err)
 	}
 }
 
@@ -359,7 +422,7 @@ func TestIntegrationInterrupt(t *testing.T) {
 			t.Errorf("TerminalReason = %q, want an aborted_* reason after interrupt", rm.TerminalReason)
 		}
 	case <-time.After(30 * time.Second):
-		t.Error("no result within 30s after interrupt — likely hung")
+		t.Error("no result within 30s after interrupt; likely hung")
 	}
 }
 
@@ -382,7 +445,7 @@ func TestIntegrationThinking(t *testing.T) {
 		}
 	}
 	if result == nil {
-		t.Fatal("no result — thinking turn did not complete")
+		t.Fatal("no result: thinking turn did not complete")
 	}
 	if result.IsError {
 		t.Errorf("thinking turn errored: %v", result.Errors)
