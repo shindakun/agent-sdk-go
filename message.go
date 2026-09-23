@@ -4,7 +4,10 @@ import "encoding/json"
 
 // Message is a single item in the stream emitted by the CLI. The concrete types
 // are [AssistantMessage], [UserMessage], [SystemMessage], [ResultMessage],
-// [StreamEvent], and [TaskNotification].
+// [StreamEvent], [RateLimitEvent], [ConversationResetMessage], the task
+// lifecycle messages ([TaskStartedMessage], [TaskProgressMessage],
+// [TaskNotificationMessage], [TaskUpdatedMessage]), [HookEventMessage], and
+// [MirrorErrorMessage]. Frame types this version does not know are skipped.
 //
 // Decode the stream by type-switching on the concrete types; the discriminated
 // union is sealed (only this package defines implementations).
@@ -37,7 +40,12 @@ type UserMessage struct {
 	ParentToolUseID string
 	UUID            string          `json:"uuid,omitempty"`
 	ToolUseResult   json.RawMessage `json:"tool_use_result,omitempty"`
-	Raw             json.RawMessage
+	// Origin is the provenance of this message, or nil when the CLI did not
+	// attribute it. It is set on turns the session injects (task
+	// notifications, channel and peer messages, ...) and on user messages the
+	// CLI replays; tool-result messages never carry it.
+	Origin *MessageOrigin `json:"origin,omitempty"`
+	Raw    json.RawMessage
 }
 
 func (*UserMessage) isMessage() {}
@@ -129,10 +137,31 @@ type ResultMessage struct {
 	APIErrorStatus    *int                  `json:"api_error_status,omitempty"`
 	SessionID         string                `json:"session_id"`
 	UUID              string                `json:"uuid,omitempty"`
-	Raw               json.RawMessage
+	// Origin is the origin of the user message that triggered this turn. It
+	// tells the result of your own prompt (nil) from results of turns the
+	// session injected, such as background-task notifications.
+	Origin *MessageOrigin `json:"origin,omitempty"`
+	Raw    json.RawMessage
 }
 
 func (*ResultMessage) isMessage() {}
+
+// ConversationResetMessage reports that the session's conversation was
+// replaced without ending the connection, for example after /clear. The reset
+// clears the history and zeroes the running totals on later [ResultMessage]s
+// (such as TotalCostUSD), so snapshot accumulated totals when it arrives.
+type ConversationResetMessage struct {
+	// NewConversationID identifies the fresh conversation, for keying an empty
+	// transcript. It is not the SessionID of later messages; read that from
+	// the next message.
+	NewConversationID string `json:"new_conversation_id"`
+	UUID              string `json:"uuid"`
+	// SessionID is the session that was reset; later messages carry a new one.
+	SessionID string `json:"session_id"`
+	Raw       json.RawMessage
+}
+
+func (*ConversationResetMessage) isMessage() {}
 
 // StreamEvent is a partial/delta event, emitted only when partial messages are
 // enabled. Event holds the raw streaming event payload.

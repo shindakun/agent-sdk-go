@@ -199,7 +199,10 @@ needs Claude Code 2.1.248 or later.
 The streamed `Message` union: `AssistantMessage`, `UserMessage`, `SystemMessage`,
 `ResultMessage`, `StreamEvent`, `TaskStartedMessage`, `TaskProgressMessage`,
 `TaskNotificationMessage`, `TaskUpdatedMessage`, `RateLimitEvent`,
-`MirrorErrorMessage`. Content blocks:
+`ConversationResetMessage`, `HookEventMessage`, `MirrorErrorMessage`. Frame
+types the SDK does not know are skipped. `UserMessage.Origin` and
+`ResultMessage.Origin` tell your own turns from ones the session injected, such
+as background-task notifications. Content blocks:
 `TextBlock`, `ThinkingBlock`, `ToolUseBlock`, `ToolResultBlock`,
 `ServerToolUseBlock`, `ServerToolResultBlock`.
 

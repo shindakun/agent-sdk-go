@@ -291,7 +291,7 @@ func decodeMessageLine(line protocol.MessageLine) (Message, error) {
 	}
 	msg, err := UnmarshalMessage(line.Data)
 	if err != nil {
-		if IsNotAMessage(err) {
+		if IsNotAMessage(err) || isUnknownMessageType(err) {
 			return nil, nil
 		}
 		return nil, err

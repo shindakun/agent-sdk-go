@@ -729,3 +729,93 @@ func TestE2ESessionStoreResumeAppliesUserSettings(t *testing.T) {
 		t.Errorf("user settings.json not applied on store resume: output_style = %v", resumedInit["output_style"])
 	}
 }
+
+// --- Conversation reset and origin (mirror test_conversation_reset.py and
+// test_message_origin.py) ------------------------------------------------------
+
+// receiveResult drains one turn and returns its result, collecting the other
+// messages into seen.
+func receiveResult(t *testing.T, ctx context.Context, c *Client, seen *[]Message) *ResultMessage {
+	t.Helper()
+	for msg, err := range c.ReceiveResponse(ctx) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		if seen != nil {
+			*seen = append(*seen, msg)
+		}
+		if r, ok := msg.(*ResultMessage); ok {
+			return r
+		}
+	}
+	t.Fatal("turn ended without a result")
+	return nil
+}
+
+func TestE2EClearEmitsConversationReset(t *testing.T) {
+	e2eSkip(t)
+	ctx, cancel := e2eCtx(t)
+	defer cancel()
+	c := NewClient(WithMaxTurns(1))
+	if err := c.Connect(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = c.Close() }()
+
+	if err := c.Query(ctx, "Reply with exactly: one"); err != nil {
+		t.Fatal(err)
+	}
+	first := receiveResult(t, ctx, c, nil)
+
+	if err := c.Query(ctx, "/clear"); err != nil {
+		t.Fatal(err)
+	}
+	var seen []Message
+	cleared := receiveResult(t, ctx, c, &seen)
+	var reset *ConversationResetMessage
+	for _, m := range seen {
+		if r, ok := m.(*ConversationResetMessage); ok {
+			reset = r
+		}
+	}
+	if reset == nil {
+		t.Fatal("no ConversationResetMessage after /clear")
+	}
+	if reset.SessionID != first.SessionID || reset.NewConversationID == "" || reset.UUID == "" {
+		t.Errorf("reset = %+v, first session %s", reset, first.SessionID)
+	}
+	if cleared.SessionID == first.SessionID {
+		t.Errorf("result after /clear kept the old session id %s", cleared.SessionID)
+	}
+}
+
+func TestE2EResultOriginRoundTrip(t *testing.T) {
+	e2eSkip(t)
+	ctx, cancel := e2eCtx(t)
+	defer cancel()
+	c := NewClient(WithMaxTurns(1))
+	if err := c.Connect(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = c.Close() }()
+
+	// The public API sends unstamped prompts; write a host-stamped frame
+	// directly, as upstream's test streams one.
+	stamped := []byte(`{"type":"user","message":{"role":"user","content":"Reply with exactly: one"},` +
+		`"parent_tool_use_id":null,"session_id":"default","origin":{"kind":"human"}}`)
+	if err := c.sess.t.Write(ctx, stamped); err != nil {
+		t.Fatal(err)
+	}
+	r1 := receiveResult(t, ctx, c, nil)
+	if err := c.Query(ctx, "Reply with exactly: two"); err != nil {
+		t.Fatal(err)
+	}
+	r2 := receiveResult(t, ctx, c, nil)
+
+	if r1.Origin == nil || r1.Origin.Kind != OriginHuman {
+		t.Errorf("stamped turn origin = %+v (is_error=%v)", r1.Origin, r1.IsError)
+	}
+	if r2.Origin != nil {
+		t.Errorf("unstamped turn origin = %+v", r2.Origin)
+	}
+}

@@ -1,6 +1,9 @@
 package claude
 
-import "encoding/json"
+import (
+	"bytes"
+	"encoding/json"
+)
 
 // This file mirrors the remaining public types of the official SDK so callers
 // have name-for-name equivalents. Wire keys use the CLI's camelCase where the
@@ -313,4 +316,111 @@ type PermissionUpdate struct {
 	Mode        PermissionMode  `json:"mode,omitempty"`
 	Directories []string        `json:"directories,omitempty"`
 	Destination string          `json:"destination,omitempty"`
+}
+
+// --- Message origin ----------------------------------------------------------
+
+// MessageOriginKind is the kind of a [MessageOrigin]. Newer CLI versions may
+// send kinds not listed here; treat an unrecognized kind as not human.
+type MessageOriginKind string
+
+const (
+	OriginHuman            MessageOriginKind = "human"
+	OriginChannel          MessageOriginKind = "channel"
+	OriginPeer             MessageOriginKind = "peer"
+	OriginTaskNotification MessageOriginKind = "task-notification"
+	OriginCoordinator      MessageOriginKind = "coordinator"
+	OriginUnclassified     MessageOriginKind = "unclassified"
+	OriginObserver         MessageOriginKind = "observer"
+	OriginAutoContinuation MessageOriginKind = "auto-continuation"
+	OriginObserverActivity MessageOriginKind = "observer-activity"
+)
+
+// TaskNotificationOriginSubkind is [MessageOrigin].Subkind for a
+// task-notification origin.
+type TaskNotificationOriginSubkind string
+
+const (
+	// SubkindScheduledTrigger is the fired prompt of a scheduled task.
+	SubkindScheduledTrigger TaskNotificationOriginSubkind = "scheduled-trigger"
+	// SubkindPeerSendMessage is a message sent from another of the user's
+	// sessions.
+	SubkindPeerSendMessage TaskNotificationOriginSubkind = "peer-send-message"
+)
+
+// MessageOrigin is the provenance of a user-role message and, on a
+// [ResultMessage], of the message that triggered the turn. In streaming use one
+// connection interleaves the turns you send with turns the session injects
+// (background-task notifications, scheduled-task prompts, MCP channel
+// messages, messages relayed from peer sessions); the origin tells them apart.
+// Prompts sent through [Query] or [Client.Query] carry no origin.
+//
+// Only Kind is always present; the other fields depend on it. Raw holds the
+// object as the CLI sent it, including keys this version does not model.
+type MessageOrigin struct {
+	Kind MessageOriginKind `json:"kind"`
+	// Server is the MCP server a channel message arrived on.
+	Server string `json:"server,omitempty"`
+	// From is the sender address of a peer or observer message. It is asserted
+	// by the sender: use it for routing and display, not as proof of identity.
+	From string `json:"from,omitempty"`
+	// Name is a peer sender's display name, normalized by the CLI.
+	Name string `json:"name,omitempty"`
+	// FromSession is a peer sender's host-openable session id, if provided.
+	FromSession string `json:"fromSession,omitempty"`
+	// SenderTaskID is the task id of the in-process background subagent that
+	// sent a peer or observer message.
+	SenderTaskID string `json:"senderTaskId,omitempty"`
+	// Body is a peer message's decoded body with the envelope stripped, as the
+	// model saw it.
+	Body string `json:"body,omitempty"`
+	// VerifiedPeerPid is the kernel-verified pid of the process that connected
+	// to this session's messaging socket, when verifiable.
+	VerifiedPeerPid *int `json:"verifiedPeerPid,omitempty"`
+	// Subkind is set on a task-notification origin for a scheduled-task prompt
+	// or a message from another of the user's sessions.
+	Subkind TaskNotificationOriginSubkind `json:"subkind,omitempty"`
+	Raw     json.RawMessage               `json:"-"`
+}
+
+// UnmarshalJSON decodes an origin leniently: anything other than an object with
+// a string kind leaves the zero value (no Raw), which the message decoders
+// treat as absent, so a malformed origin never fails the message.
+func (o *MessageOrigin) UnmarshalJSON(b []byte) error {
+	*o = MessageOrigin{}
+	if p := parseOrigin(b); p != nil {
+		*o = *p
+	}
+	return nil
+}
+
+// parseOrigin returns the origin in raw if it is an object with a string kind,
+// else nil. Fields of the wrong type are left empty.
+func parseOrigin(raw []byte) *MessageOrigin {
+	var obj map[string]json.RawMessage
+	if json.Unmarshal(raw, &obj) != nil || obj == nil {
+		return nil
+	}
+	var kind string
+	k := bytes.TrimSpace(obj["kind"])
+	if len(k) == 0 || k[0] != '"' || json.Unmarshal(k, &kind) != nil {
+		return nil
+	}
+	type plain MessageOrigin
+	var p plain
+	if json.Unmarshal(raw, &p) != nil {
+		p = plain{}
+	}
+	o := MessageOrigin(p)
+	o.Kind = MessageOriginKind(kind)
+	o.Raw = append(json.RawMessage(nil), raw...)
+	return &o
+}
+
+// validOrigin drops an origin the lenient decoder rejected.
+func validOrigin(o *MessageOrigin) *MessageOrigin {
+	if o == nil || o.Raw == nil {
+		return nil
+	}
+	return o
 }

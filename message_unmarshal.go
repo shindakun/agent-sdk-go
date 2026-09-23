@@ -42,6 +42,8 @@ func UnmarshalMessage(b []byte) (Message, error) {
 		return &tn, nil
 	case "rate_limit_event":
 		return decodeRateLimitEvent(b)
+	case "conversation_reset":
+		return decodeConversationReset(b)
 	case "control_request", "control_response", "control_cancel_request",
 		"transcript_mirror", "end", "error":
 		return nil, &notAMessageError{typ: probe.Type}
@@ -49,9 +51,21 @@ func UnmarshalMessage(b []byte) (Message, error) {
 		return nil, &MessageParseError{
 			Type: probe.Type,
 			Raw:  clone(b),
-			Err:  fmt.Errorf("unknown message type %q", probe.Type),
+			Err:  &unknownTypeError{typ: probe.Type},
 		}
 	}
+}
+
+// unknownTypeError is the MessageParseError cause for a frame type this
+// version does not know. The message stream skips such frames, as the official
+// SDK does, so a newer CLI does not break an older SDK.
+type unknownTypeError struct{ typ string }
+
+func (e *unknownTypeError) Error() string { return fmt.Sprintf("unknown message type %q", e.typ) }
+
+func isUnknownMessageType(err error) bool {
+	var u *unknownTypeError
+	return errors.As(err, &u)
 }
 
 // notAMessageError reports that a line is a valid stream-json frame but not a
@@ -114,6 +128,7 @@ func decodeUser(b []byte) (Message, error) {
 		ParentToolUseID string          `json:"parent_tool_use_id"`
 		UUID            string          `json:"uuid"`
 		ToolUseResult   json.RawMessage `json:"tool_use_result"`
+		Origin          *MessageOrigin  `json:"origin"`
 	}
 	if err := json.Unmarshal(b, &env); err != nil {
 		return nil, &MessageParseError{Type: "user", Raw: clone(b), Err: err}
@@ -127,6 +142,7 @@ func decodeUser(b []byte) (Message, error) {
 		ParentToolUseID: env.ParentToolUseID,
 		UUID:            env.UUID,
 		ToolUseResult:   env.ToolUseResult,
+		Origin:          validOrigin(env.Origin),
 		Raw:             clone(b),
 	}, nil
 }
@@ -263,8 +279,36 @@ func decodeResult(b []byte) (Message, error) {
 	if err := json.Unmarshal(b, &m); err != nil {
 		return nil, &MessageParseError{Type: "result", Raw: clone(b), Err: err}
 	}
+	m.Origin = validOrigin(m.Origin)
 	m.Raw = clone(b)
 	return &m, nil
+}
+
+// decodeConversationReset decodes a conversation_reset frame; all three fields
+// are required.
+func decodeConversationReset(b []byte) (Message, error) {
+	var wire struct {
+		NewConversationID *string `json:"new_conversation_id"`
+		UUID              *string `json:"uuid"`
+		SessionID         *string `json:"session_id"`
+	}
+	if err := json.Unmarshal(b, &wire); err != nil {
+		return nil, &MessageParseError{Type: "conversation_reset", Raw: clone(b), Err: err}
+	}
+	for name, v := range map[string]*string{
+		"new_conversation_id": wire.NewConversationID, "uuid": wire.UUID, "session_id": wire.SessionID,
+	} {
+		if v == nil {
+			return nil, &MessageParseError{Type: "conversation_reset", Raw: clone(b),
+				Err: fmt.Errorf("missing required field %q", name)}
+		}
+	}
+	return &ConversationResetMessage{
+		NewConversationID: *wire.NewConversationID,
+		UUID:              *wire.UUID,
+		SessionID:         *wire.SessionID,
+		Raw:               clone(b),
+	}, nil
 }
 
 func decodeStreamEvent(b []byte) (Message, error) {

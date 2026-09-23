@@ -37,6 +37,7 @@ Notable wire details verified against the source:
 - Thinking is driven by the typed `ThinkingConfig` union: `--thinking adaptive`,
   `--max-thinking-tokens N` (enabled — no bare `--thinking`), `--thinking
   disabled`, plus `--thinking-display`.
+- Unknown top-level frame types are skipped, as upstream's parser does.
 - `rate_limit_event` uses camelCase keys (`resetsAt`, `rateLimitType`…) though
   the public type is snake_case.
 - The session first-prompt summary skips synthetic lines
@@ -71,6 +72,8 @@ Notable wire details verified against the source:
 | `DeferredToolUse` | `DeferredToolUse` |
 | `CanUseToolShadowedWarning` | N/A: Go has no `warnings` module. The condition is reported by `CanUseToolShadowed(opts...)` and written to the `WithStderr` writer on connect. |
 | `ModelUsage` | `ModelUsage` (`ResultMessage.ModelUsage`, camelCase wire keys) |
+| `ConversationResetMessage` | `ConversationResetMessage` |
+| `MessageOrigin`, `MessageOriginKind`, `TaskNotificationOriginSubkind` | `MessageOrigin` (+ `Raw` for unmodeled keys), `MessageOriginKind` consts, `TaskNotificationOriginSubkind` consts |
 
 ## Options, tools, MCP, agents
 
@@ -148,6 +151,8 @@ Two test tiers run against the real `claude` binary:
 | `test_sdk_mcp_tools.py` | `TestE2ESdkMcpMultipleTools`, `…PermissionEnforcement` |
 | `test_include_partial_messages.py` | `TestE2EPartialMessagesPresentAndAbsent` |
 | `test_stderr_callback.py` | `TestE2EStderrCallback` |
+| `test_conversation_reset.py` | `TestE2EClearEmitsConversationReset` |
+| `test_message_origin.py` | `TestE2EResultOriginRoundTrip` (the stamped frame is written directly; the Go API sends string prompts) |
 | `test_session_store_resume_settings.py` | `TestE2ESessionStoreResumeAppliesUserSettings` |
 | `test_verbatim_prompts.py` | `TestE2EAtPathExpandedByDefault`, `TestE2EVerbatimQueryNotExpanded`, `TestE2EVerbatimClientNotExpanded` |
 | `test_tool_permissions.py` | `TestIntegrationCanUseToolOnlyStringPrompt`, `TestIntegrationCanUseToolDeny` (integration tier) |

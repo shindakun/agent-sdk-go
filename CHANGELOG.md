@@ -28,6 +28,16 @@ All notable changes to this project are documented here. The format is based on
   upstream `6e3d54f` with `b4d65f5`. `WithSessionStore` combined with
   `WithEnableFileCheckpointing` is now rejected, as upstream.
 
+- **`ConversationResetMessage`** for the CLI's `conversation_reset` frame,
+  sent when the conversation is replaced mid-session (for example by `/clear`).
+  Later results report zeroed totals under a new session id. Ports upstream
+  `54dd3b4`.
+- **`MessageOrigin`** on `UserMessage.Origin` and `ResultMessage.Origin`: the
+  provenance of a user turn, and of the turn a result answers (`human`,
+  `task-notification`, `peer`, `channel`, ...). A malformed origin reads as
+  absent; `Raw` keeps keys this version does not model. Ports upstream
+  `d48fa33`.
+
 ### Changed
 
 - **Breaking: `WithLoadTimeout` bounds SessionStore calls during resume**, as
@@ -41,6 +51,11 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- **An unknown frame type ended the stream.** The decoder reported any
+  unrecognized top-level `type` as an error, and `Query` stops at the first
+  error, so a frame added by a newer CLI broke older SDK builds. `/clear`
+  against CLI 2.1.280 did exactly that with `conversation_reset`. The stream now
+  skips unknown frames, as upstream does; `UnmarshalMessage` still reports them.
 - **Long-path project keys did not match the CLI's.** The djb2 hash suffix for
   paths over 200 characters was taken as unsigned; the CLI and upstream take the
   absolute value of the signed hash, so every negative hash named a different
