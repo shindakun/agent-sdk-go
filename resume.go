@@ -472,27 +472,6 @@ func materializeSubkeys(ctx context.Context, store SessionStore, projectDir, pro
 	return nil
 }
 
-// splitAgentMetadata separates the synthetic agent_metadata entries (the
-// subagent's .meta.json sidecar; the last one wins) from transcript lines.
-func splitAgentMetadata(entries []SessionStoreEntry) (map[string]json.RawMessage, []SessionStoreEntry) {
-	var metadata map[string]json.RawMessage
-	var transcript []SessionStoreEntry
-	for _, e := range entries {
-		var obj map[string]json.RawMessage
-		if json.Unmarshal(e.Data, &obj) == nil && string(obj["type"]) == `"agent_metadata"` {
-			metadata = obj
-			continue
-		}
-		transcript = append(transcript, e)
-	}
-	return metadata, transcript
-}
-
-// agentMetadataSidecarPath maps agent-<id>.jsonl to agent-<id>.meta.json.
-func agentMetadataSidecarPath(transcriptPath string) string {
-	return strings.TrimSuffix(transcriptPath, ".jsonl") + ".meta.json"
-}
-
 // isSafeSubpath rejects subpaths that are empty, absolute, drive- or
 // UNC-prefixed, contain "." or ".." segments or NUL, or resolve outside
 // sessionDir. Both separators are checked whatever the host OS, since store

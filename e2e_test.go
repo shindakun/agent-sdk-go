@@ -1108,3 +1108,169 @@ func TestE2ESystemPromptSnapshot(t *testing.T) {
 		})
 	}
 }
+
+// --- Subagent session reads (mirrors test_subagent_session_reads.py) ----------
+
+func TestE2ESubagentMessagesCarryParentToolUseID(t *testing.T) {
+	e2eSkip(t)
+	store := NewInMemorySessionStore()
+	cwd := t.TempDir()
+	ctx, cancel := context.WithTimeout(context.Background(), 240*time.Second)
+	defer cancel()
+
+	agentCalls := map[string]bool{}
+	var sessionID string
+	for msg, err := range Query(ctx, "Use the Agent tool exactly once with subagent_type 'greeter', prompt "+
+		"'say hi', and run_in_background set to false. Then reply with the single word DONE.",
+		isolatedOpts(cwd,
+			WithSessionStore(store, FlushBatched),
+			WithAgents(map[string]AgentDefinition{"greeter": {
+				Description: "Replies with a short greeting. Use for greeting tasks.",
+				Prompt:      "Reply with one short friendly sentence. Do not use any tools.",
+				Model:       "haiku",
+			}}),
+			WithAllowedTools("Agent", "Task"),
+			WithMaxTurns(4),
+		)...) {
+		if err != nil {
+			t.Fatalf("query: %v", err)
+		}
+		switch m := msg.(type) {
+		case *AssistantMessage:
+			if m.ParentToolUseID != "" {
+				continue
+			}
+			for _, b := range m.Content {
+				if tu, ok := b.(*ToolUseBlock); ok && (tu.Name == "Agent" || tu.Name == "Task") {
+					agentCalls[tu.ID] = true
+				}
+			}
+		case *ResultMessage:
+			if m.IsError {
+				t.Fatalf("run failed: %+v", m)
+			}
+			sessionID = m.SessionID
+		}
+	}
+	if sessionID == "" || len(agentCalls) == 0 {
+		t.Fatalf("session %q, agent calls %v", sessionID, agentCalls)
+	}
+
+	// attributed maps agent id to the parent ids of its messages, for
+	// transcripts attributed only to Agent calls seen in the stream.
+	attributed := func(byAgent map[string][]SessionMessage) map[string]string {
+		out := map[string]string{}
+		for id, msgs := range byAgent {
+			if len(msgs) == 0 {
+				continue
+			}
+			parent := msgs[0].ParentToolUseID
+			ok := agentCalls[parent]
+			for _, m := range msgs {
+				if m.ParentToolUseID != parent || m.ParentAgentID != "" {
+					ok = false
+				}
+			}
+			if ok {
+				out[id] = parent
+			}
+		}
+		return out
+	}
+
+	local := map[string][]SessionMessage{}
+	ids, err := ListSubagents(sessionID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range ids {
+		msgs, err := GetSubagentMessages(sessionID, id, "", 0, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		local[id] = msgs
+	}
+	localAttr := attributed(local)
+	if len(localAttr) == 0 {
+		t.Fatalf("no local subagent transcript attributed to %v; subagents %v", agentCalls, ids)
+	}
+
+	mirrored := map[string][]SessionMessage{}
+	sids, err := ListSubagentsFromStore(ctx, store, sessionID, cwd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range sids {
+		msgs, err := GetSubagentMessagesFromStore(ctx, store, sessionID, id, cwd, 0, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		mirrored[id] = msgs
+	}
+	mirroredAttr := attributed(mirrored)
+	if len(mirroredAttr) == 0 {
+		t.Fatalf("no mirrored subagent transcript attributed to %v; subagents %v", agentCalls, sids)
+	}
+	both := 0
+	for id, parent := range localAttr {
+		if mp, ok := mirroredAttr[id]; ok {
+			both++
+			if mp != parent {
+				t.Errorf("agent %s: local parent %s, mirrored parent %s", id, parent, mp)
+			}
+		}
+	}
+	if both == 0 {
+		t.Errorf("no subagent attributed on both paths: local %v, mirrored %v", localAttr, mirroredAttr)
+	}
+}
+
+// --- SDK MCP annotations reach the CLI -----------------------------------------
+
+// The CLI reports each connected tool's annotations in mcp_status. Tools must
+// advertise MCP's hint names (readOnlyHint, ...) for the CLI to pick them up.
+func TestE2ESdkMcpAnnotationsReachCLI(t *testing.T) {
+	e2eSkip(t)
+	ctx, cancel := e2eCtx(t)
+	defer cancel()
+	noop := func(ctx context.Context, args json.RawMessage) (ToolResult, error) { return TextResult("ok"), nil }
+	srv := NewSdkMcpServer("annot").
+		AddTool(Tool{Name: "reader", Description: "Reads", Handler: noop,
+			Annotations: &ToolAnnotations{ReadOnlyHint: Bool(true), DestructiveHint: Bool(false), OpenWorldHint: Bool(false)}}).
+		AddTool(Tool{Name: "writer", Description: "Writes", Handler: noop,
+			Annotations: &ToolAnnotations{ReadOnlyHint: Bool(false), DestructiveHint: Bool(true)}})
+	c := NewClient(isolatedOpts(t.TempDir(), WithSDKMCPServer("annot", srv))...)
+	if err := c.Connect(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = c.Close() }()
+
+	var server *McpServerStatusInfo
+	for i := 0; i < 50 && server == nil; i++ {
+		st, err := c.McpStatus(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for j := range st.McpServers {
+			if st.McpServers[j].Name == "annot" && st.McpServers[j].Status == "connected" && len(st.McpServers[j].Tools) > 0 {
+				server = &st.McpServers[j]
+			}
+		}
+		if server == nil {
+			time.Sleep(200 * time.Millisecond)
+		}
+	}
+	if server == nil {
+		t.Fatal("annot server never reported connected with tools")
+	}
+	byName := map[string]*McpToolAnnotations{}
+	for _, tl := range server.Tools {
+		byName[tl.Name] = tl.Annotations
+	}
+	if a := byName["reader"]; a == nil || !a.ReadOnly || a.Destructive || a.OpenWorld {
+		t.Errorf("reader annotations = %+v", a)
+	}
+	if a := byName["writer"]; a == nil || a.ReadOnly || !a.Destructive {
+		t.Errorf("writer annotations = %+v", a)
+	}
+}

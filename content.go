@@ -48,6 +48,14 @@ type ToolResultBlock struct {
 
 func (*ToolResultBlock) isContentBlock() {}
 
+// ImageBlock is base64-encoded image data, for in-process tool results.
+type ImageBlock struct {
+	Data     string `json:"data"`
+	MimeType string `json:"mimeType"`
+}
+
+func (*ImageBlock) isContentBlock() {}
+
 // Text returns the textual content of the result when it is encoded as a plain
 // string. The second return value reports whether Content was a JSON string.
 func (b *ToolResultBlock) Text() (string, bool) {

@@ -226,9 +226,13 @@ if errors.As(err, &re) {
 ## Sessions
 
 Read on-disk transcripts (no running CLI needed): `ListSessions`,
-`GetSessionInfo`, `GetSessionMessages`, `ListSubagents`, `GetSubagentMessages`.
-A `SessionStore` interface with `InMemorySessionStore`, `*ViaStore` mutations,
-`FoldSessionSummary`, and `ImportSessionToStore` mirrors the upstream session API.
+`GetSessionInfo`, `GetSessionMessages`, `ListSubagents`, `GetSubagentMessages`;
+change them with `RenameSession`, `TagSession`, `DeleteSession`, and
+`ForkSession`. Pass a directory to scope to that project and its git worktrees,
+or `""` for every project. A `SessionStore` interface with
+`InMemorySessionStore`, the `*FromStore` readers, the `*ViaStore` mutations,
+`FoldSessionSummary`, and `ImportSessionToStore` mirrors the upstream session
+API.
 Live mirroring is available via `WithSessionStore`. Adding `WithResume` or
 `WithContinueConversation` resumes the session from the store, so the local
 transcript does not need to exist; the caller's credentials and user settings

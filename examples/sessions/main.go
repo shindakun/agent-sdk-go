@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	infos, err := claude.ListSessions("", 10, 0)
+	infos, err := claude.ListSessions(".", 10, 0)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "list sessions:", err)
 		os.Exit(1)
@@ -28,7 +28,7 @@ func main() {
 
 	latest := infos[0]
 	fmt.Printf("\nmessages in %s:\n", latest.SessionID)
-	msgs, err := claude.GetSessionMessages(latest.SessionID, "", 0, 0)
+	msgs, err := claude.GetSessionMessages(latest.SessionID, ".", 0, 0)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "get messages:", err)
 		os.Exit(1)

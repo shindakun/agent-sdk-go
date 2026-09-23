@@ -41,6 +41,9 @@ type session struct {
 	// materialized is the temp config dir of a SessionStore-backed resume,
 	// removed on close.
 	materialized *materializedResume
+	// mcpStates holds per-server connection state for in-process MCP servers.
+	mcpMu     sync.Mutex
+	mcpStates map[string]*mcpServerState
 }
 
 func newSession(opts *Options) *session {
@@ -128,7 +131,18 @@ func (s *session) connect(ctx context.Context) (err error) {
 			s.opts.sessionStore,
 			s.opts.sessionStoreFlush,
 			func() (string, error) { return projectsDirFor(s.opts.env) },
-			func(m Message) { s.injectCh <- m },
+			func(m Message) {
+				// Never block the read loop on a slow consumer; drop instead.
+				select {
+				case s.injectCh <- m:
+				default:
+				}
+			},
+			func(msg string) {
+				if s.opts.stderr != nil {
+					_, _ = io.WriteString(s.opts.stderr, "claude: warning: "+msg+"\n")
+				}
+			},
 		)
 		s.engine.SetMirrorSink(s.mirror.enqueue)
 	}

@@ -55,8 +55,59 @@ All notable changes to this project are documented here. The format is based on
   discarded so the CLI refuses the resume if anything else would be lost.
   Ports upstream `be2d0df`.
 
+- **Session functions the port lacked:** `RenameSession`, `TagSession`,
+  `DeleteSession`, and `ForkSession` on disk, and the store-backed readers
+  `ListSessionsFromStore`, `GetSessionInfoFromStore`,
+  `GetSessionMessagesFromStore`, `ListSubagentsFromStore`, and
+  `GetSubagentMessagesFromStore`. Also `ListIncludeWorktrees`,
+  `ErrSessionNotFound`, and `SessionMessage.ParentAgentID`.
+- **Subagent messages carry their parent.** `GetSubagentMessages` and
+  `GetSubagentMessagesFromStore` set `ParentToolUseID` to the Agent tool call
+  that spawned the subagent (and `ParentAgentID` for nested subagents), from
+  the `.meta.json` sidecar or its mirrored `agent_metadata` entry. Ports
+  upstream `2bbdce6`.
+- **`ImageBlock`** for image content in in-process tool results, and `Bool`
+  for the optional `ToolAnnotations` hints.
+
 ### Changed
 
+- **Breaking: session readers and mutations follow the official SDK.** This
+  is a port of upstream's `sessions.py`, `session_mutations.py`,
+  `session_summary.py`, and `session_import.py`, replacing a simplified
+  reimplementation:
+  - `ListSessions("")` lists every project, as upstream's `directory=None`
+    does; pass `"."` for the current directory. A directory inside a git
+    repository includes the repository's worktrees unless
+    `ListIncludeWorktrees(false)` is given.
+  - `GetSessionMessages` returns the conversation's main chain rebuilt from
+    `parentUuid` links, without sidechain, meta, or team messages, instead of
+    every user and assistant line in file order.
+  - Session ids must be UUIDs, as upstream requires; `GetSessionInfo` returns
+    `ErrSessionNotFound` for a missing, sidechain, or empty session.
+  - `RenameSessionViaStore`, `TagSessionViaStore`, `DeleteSessionViaStore`, and
+    `ForkSessionViaStore` take `(ctx, store, sessionID, ..., directory)` like
+    upstream instead of a `SessionKey`.
+  - `SessionSummaryEntry` no longer has a `Summary` field; the summary is
+    derived when listing, with upstream's title, last-prompt, and summary
+    precedence.
+- **Breaking: `ToolAnnotations` is MCP's tool annotation type** (`Title`,
+  `ReadOnlyHint`, `DestructiveHint`, `IdempotentHint`, `OpenWorldHint`, and
+  `MaxResultSizeChars`) instead of an alias of `McpToolAnnotations`, the
+  status-report shape.
+- **In-process MCP servers answer as the official SDK's do** (upstream
+  `0f005fa` serves them with the mcp library): `initialize` negotiates the
+  protocol version and reports `{"experimental": {}, "tools": {"listChanged":
+  false}}`; `ping` is answered; unknown methods and servers get JSON-RPC errors
+  (-32601) rather than control errors; requests before `initialize` get -32602;
+  `notifications/cancelled` cancels the running tool call, which answers
+  -32800; a reused in-flight id is refused. Tool arguments are validated
+  against the input schema before the handler runs ("Input validation error:
+  ..."), an unknown tool is an error result, and an empty result has empty
+  content.
+- **The live mirror** appends when the pending buffer passes 500 entries or
+  1 MiB, retries a failed append twice with backoff (not after a timeout), keeps
+  each file's appends in order, and never blocks the read loop to report a
+  dropped batch.
 - **Behavior: a non-zero CLI exit now ends the stream with an error.** `Query`
   and `Client` delivered the error result and then ended silently; the exit
   status was only visible from `Client.Close`. The stream now ends with a
@@ -75,6 +126,26 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- **Subagent transcripts were not found.** `ListSubagents` and
+  `GetSubagentMessages` looked for `agentId`-tagged lines in the main
+  transcript; the CLI writes each subagent to
+  `<session>/subagents/agent-<id>.jsonl`. Against CLI 2.1.280, `ListSubagents`
+  returned nothing for a session with a subagent.
+- **Session titles and tags.** Listing now reads AI titles, the last prompt,
+  and the CLI's summary, and reads tags only from tag entries, as upstream's
+  head/tail scan does.
+- **`RenameSessionViaStore` wrote an entry readers ignore** (`"type":
+  "rename"`); it now appends `custom-title`. `ForkSessionViaStore` copied
+  entries under a caller-chosen id; it now remaps every UUID and records
+  `forkedFrom`, as a fork must.
+- **`ImportSessionToStore` ignored `ImportIncludeSubagents`** and looked only
+  in the current directory's project; it now imports subagent transcripts
+  with their metadata and searches every project when no directory is given.
+- **Tool annotations never reached the CLI.** They were sent as `readOnly`,
+  `destructive`, and `openWorld`, which the CLI does not read; they are now
+  `readOnlyHint`, `destructiveHint`, `idempotentHint`, and `openWorldHint`, and
+  `maxResultSizeChars` goes in the tool's `_meta`. Verified by the CLI's own
+  `mcp_status` report.
 - **An unknown frame type ended the stream.** The decoder reported any
   unrecognized top-level `type` as an error, and `Query` stops at the first
   error, so a frame added by a newer CLI broke older SDK builds. `/clear`

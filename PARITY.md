@@ -86,7 +86,8 @@ Notable wire details verified against the source:
 | --- | --- |
 | `PermissionMode`, `EffortLevel`, `TaskBudget`, `SettingSource`, `SdkBeta` | same (consts) |
 | `McpServerConfig`, `McpSdkServerConfig` | `McpServerConfig`, `*SdkMcpServer`, `StdioMcpServer`, `HTTPMcpServer`, `SSEMcpServer` |
-| `McpServerStatus`, `McpServerInfo`, `McpStatusResponse`, `McpToolInfo`, `McpToolAnnotations`, `ToolAnnotations`, `McpServerConnectionStatus` | `McpServerStatusInfo`, `McpServerInfo`, `McpStatusResponse`, `McpToolInfo`, `McpToolAnnotations`, `ToolAnnotations`, `McpServerConnectionStatus` |
+| `McpServerStatus`, `McpServerInfo`, `McpStatusResponse`, `McpToolInfo`, `McpToolAnnotations`, `McpServerConnectionStatus` | `McpServerStatusInfo`, `McpServerInfo`, `McpStatusResponse`, `McpToolInfo`, `McpToolAnnotations`, `McpServerConnectionStatus` |
+| `ToolAnnotations` (MCP hints + `maxResultSizeChars`) | `ToolAnnotations` (`maxResultSizeChars` sent in `_meta`) |
 | `AgentDefinition` | `AgentDefinition` (full field set) |
 | `SdkPluginConfig` | `SdkPluginConfig`, `WithPlugins` |
 | `SandboxSettings`, `SandboxNetworkConfig`, `SandboxIgnoreViolations` | same (`WithSandbox`) |
@@ -110,20 +111,32 @@ Notable wire details verified against the source:
 
 | Python | Go |
 | --- | --- |
-| `list_sessions`, `get_session_info`, `get_session_messages` | `ListSessions`, `GetSessionInfo`, `GetSessionMessages` |
+| `list_sessions`, `get_session_info`, `get_session_messages` | `ListSessions` (+ `ListIncludeWorktrees`), `GetSessionInfo`, `GetSessionMessages` |
 | `list_subagents`, `get_subagent_messages` | `ListSubagents`, `GetSubagentMessages` |
+| `list_sessions_from_store`, `get_session_info_from_store`, `get_session_messages_from_store`, `list_subagents_from_store`, `get_subagent_messages_from_store` | `ListSessionsFromStore`, `GetSessionInfoFromStore`, `GetSessionMessagesFromStore`, `ListSubagentsFromStore`, `GetSubagentMessagesFromStore` |
 | `SDKSessionInfo`, `SessionMessage` | same |
 | `SessionStore`, `InMemorySessionStore`, `SessionKey`, `SessionStoreEntry`, `SessionStoreListEntry`, `SessionSummaryEntry`, `SessionListSubkeysKey`, `SessionStoreFlushMode` | same |
-| `rename_session`, `tag_session`, `delete_session`, `fork_session` (+ `_via_store`), `ForkSessionResult` | `RenameSessionViaStore`, `TagSessionViaStore`, `DeleteSessionViaStore`, `ForkSessionViaStore`, `ForkSessionResult` |
+| `rename_session`, `tag_session`, `delete_session`, `fork_session`, `ForkSessionResult` | `RenameSession`, `TagSession`, `DeleteSession`, `ForkSession`, `ForkSessionResult` |
+| `rename_session_via_store`, `tag_session_via_store`, `delete_session_via_store`, `fork_session_via_store` | `RenameSessionViaStore`, `TagSessionViaStore`, `DeleteSessionViaStore`, `ForkSessionViaStore` |
 | `fold_session_summary`, `import_session_to_store` | `FoldSessionSummary`, `ImportSessionToStore` |
 | `project_key_for_directory` | `ProjectKeyForDirectory` |
 | live `session_store` mirror (transcript_mirror → store) | `WithSessionStore` + `MirrorErrorMessage` |
 | store-backed resume (`session_resume.py`: materialize into a temp `CLAUDE_CONFIG_DIR`) | `WithSessionStore` + `WithResume`/`WithContinueConversation`, bounded by `WithLoadTimeout` |
 
 Session reading is disk-based: it reads the CLI's
-`~/.claude/projects/<sanitized-cwd>/<id>.jsonl` transcripts directly, using the
-same path-sanitization (non-alphanumeric → `-`, djb2/base-36 hash suffix past
-200 bytes) as the official SDK. No running CLI is required.
+`<config dir>/projects/<project key>/<id>.jsonl` transcripts and
+`<id>/subagents/**/agent-<id>.jsonl` subagent transcripts directly, with the
+official SDK's path resolution (realpath, `CLAUDE_CONFIG_DIR`, non-alphanumeric
+→ `-`, djb2/base-36 hash suffix past 200 bytes, worktree lookup) and chain
+building. No running CLI is required. Upstream also NFC-normalizes paths and
+NFKC-normalizes tags; that needs Unicode tables outside Go's standard library
+and is not done.
+
+In-process MCP servers: upstream serves them with the Python mcp library; the
+Go dispatch reproduces that wire behavior (version negotiation, capabilities,
+JSON-RPC errors, cancellation, argument validation with jsonschema's
+messages), as its tests port the relevant cases of
+`test_sdk_mcp_integration.py`.
 
 ## Errors
 
@@ -157,6 +170,8 @@ Two test tiers run against the real `claude` binary:
 | `test_sdk_mcp_tools.py` | `TestE2ESdkMcpMultipleTools`, `…PermissionEnforcement` |
 | `test_include_partial_messages.py` | `TestE2EPartialMessagesPresentAndAbsent` |
 | `test_stderr_callback.py` | `TestE2EStderrCallback` |
+| `test_subagent_session_reads.py` | `TestE2ESubagentMessagesCarryParentToolUseID` |
+| (MCP annotations, via `mcp_status`) | `TestE2ESdkMcpAnnotationsReachCLI` |
 | `test_forward_subagent_text.py` | `TestE2EForwardSubagentTextDeliversAttributedText`, `TestE2ESubagentTextNotForwardedByDefault` |
 | `test_truncating_resume.py` | `TestE2ETruncatingResumeMatchingDropsTurn`, `TestE2ETruncatingResumeWrongDropsTurnRefused` |
 | `test_error_results.py` | `TestE2EAPIErrorYieldsResultError` |

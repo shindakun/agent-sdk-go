@@ -3,13 +3,27 @@ package claude
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
 
-// mirrorMaxPendingEntries bounds the eager-flush threshold for the live mirror.
-const mirrorMaxPendingEntries = 500
+// Live mirror thresholds and retry policy, as in the official
+// TranscriptMirrorBatcher.
+const (
+	mirrorMaxPendingEntries = 500
+	mirrorMaxPendingBytes   = 1 << 20
+
+	mirrorAppendMaxAttempts = 3
+)
+
+var (
+	mirrorAppendBackoff = []time.Duration{200 * time.Millisecond, 800 * time.Millisecond}
+	mirrorSendTimeout   = 60 * time.Second
+)
 
 // transcriptMirrorFrame is the CLI's stdout frame carrying entries to mirror.
 type transcriptMirrorFrame struct {
@@ -17,86 +31,138 @@ type transcriptMirrorFrame struct {
 	Entries  []json.RawMessage `json:"entries"`
 }
 
-// mirrorBatcher accumulates transcript_mirror frames and flushes them to a
-// SessionStore, mirroring the official TranscriptMirrorBatcher. On append
-// failure it emits a MirrorErrorMessage via emit (non-fatal).
+type mirrorItem struct {
+	filePath string
+	entries  []SessionStoreEntry
+}
+
+// mirrorBatcher accumulates transcript_mirror frames and appends them to a
+// SessionStore on each result, on close, and in the background once the
+// pending buffer passes 500 entries or 1 MiB (every frame in eager mode).
+// Each file's entries are appended in order, files in first-seen order. A
+// failed append is retried twice with backoff (a timeout is not retried, since
+// the call may still land); a batch that still fails is dropped and reported
+// as a MirrorErrorMessage. The local transcript is already durable, so
+// failures never stop the session.
 type mirrorBatcher struct {
 	store      SessionStore
-	flush      SessionStoreFlushMode
 	projectsCb func() (string, error) // resolves the projects dir lazily
 	emit       func(Message)
+	warn       func(string)
+	maxEntries int
+	maxBytes   int
 
 	mu      sync.Mutex
-	pending map[string][]SessionStoreEntry // keyed by storeKey
-	keys    map[string]SessionKey
-	count   int
+	pending []mirrorItem
+	entries int
+	bytes   int
+
+	// flushMu serializes drains so appends stay in order.
+	flushMu sync.Mutex
 }
 
-func newMirrorBatcher(store SessionStore, flush SessionStoreFlushMode, projectsCb func() (string, error), emit func(Message)) *mirrorBatcher {
-	return &mirrorBatcher{
-		store:      store,
-		flush:      flush,
-		projectsCb: projectsCb,
-		emit:       emit,
-		pending:    map[string][]SessionStoreEntry{},
-		keys:       map[string]SessionKey{},
+func newMirrorBatcher(store SessionStore, flush SessionStoreFlushMode, projectsCb func() (string, error), emit func(Message), warn func(string)) *mirrorBatcher {
+	b := &mirrorBatcher{store: store, projectsCb: projectsCb, emit: emit, warn: warn,
+		maxEntries: mirrorMaxPendingEntries, maxBytes: mirrorMaxPendingBytes}
+	if flush == FlushEager {
+		b.maxEntries, b.maxBytes = 0, 0
 	}
+	return b
 }
 
-// enqueue buffers a raw transcript_mirror frame; with eager flush mode it
-// flushes once thresholds are exceeded.
+// enqueue buffers a raw transcript_mirror frame, starting a background drain
+// when the thresholds are passed.
 func (b *mirrorBatcher) enqueue(raw []byte) {
 	var frame transcriptMirrorFrame
 	if json.Unmarshal(raw, &frame) != nil {
 		return
 	}
-	projectsDir, err := b.projectsCb()
-	if err != nil {
-		return
-	}
-	key, ok := filePathToSessionKey(frame.FilePath, projectsDir)
-	if !ok {
-		return
-	}
-
 	entries := make([]SessionStoreEntry, 0, len(frame.Entries))
+	size := 2
 	for _, e := range frame.Entries {
 		entries = append(entries, SessionStoreEntry{Data: append([]byte(nil), e...)})
+		size += len(e) + 1
 	}
-
 	b.mu.Lock()
-	sk := storeKey(key)
-	b.pending[sk] = append(b.pending[sk], entries...)
-	b.keys[sk] = key
-	b.count += len(entries)
-	overflow := b.flush == FlushEager || b.count >= mirrorMaxPendingEntries
+	b.pending = append(b.pending, mirrorItem{frame.FilePath, entries})
+	b.entries += len(entries)
+	b.bytes += size
+	overflow := b.entries > b.maxEntries || b.bytes > b.maxBytes
 	b.mu.Unlock()
-
 	if overflow {
-		b.Flush(context.Background())
+		go b.Flush(context.Background())
 	}
 }
 
-// Flush appends all pending entries to the store. A per-key append failure
-// emits a MirrorErrorMessage and is otherwise non-fatal.
+// Flush appends everything pending, after any drain already in progress.
 func (b *mirrorBatcher) Flush(ctx context.Context) {
 	b.mu.Lock()
-	pending := b.pending
-	keys := b.keys
-	b.pending = map[string][]SessionStoreEntry{}
-	b.keys = map[string]SessionKey{}
-	b.count = 0
+	items := b.pending
+	b.pending, b.entries, b.bytes = nil, 0, 0
 	b.mu.Unlock()
 
-	for sk, entries := range pending {
-		key := keys[sk]
-		if err := b.store.Append(ctx, key, entries); err != nil {
-			k := key
-			if b.emit != nil {
-				b.emit(&MirrorErrorMessage{Key: &k, Error: err.Error()})
-			}
+	b.flushMu.Lock()
+	if len(items) == 0 {
+		b.flushMu.Unlock()
+		return
+	}
+	errs := b.doFlush(ctx, items)
+	b.flushMu.Unlock()
+	// Reported after releasing the lock, so a slow consumer never holds up
+	// later drains.
+	for _, e := range errs {
+		if b.emit != nil {
+			b.emit(e)
 		}
 	}
+}
+
+func (b *mirrorBatcher) doFlush(ctx context.Context, items []mirrorItem) []*MirrorErrorMessage {
+	var order []string
+	byPath := map[string][]SessionStoreEntry{}
+	for _, it := range items {
+		if _, ok := byPath[it.filePath]; !ok {
+			order = append(order, it.filePath)
+		}
+		byPath[it.filePath] = append(byPath[it.filePath], it.entries...)
+	}
+	projectsDir, err := b.projectsCb()
+	if err != nil {
+		return nil
+	}
+	var errs []*MirrorErrorMessage
+	for _, path := range order {
+		entries := byPath[path]
+		if len(entries) == 0 {
+			continue
+		}
+		key, ok := filePathToSessionKey(path, projectsDir)
+		if !ok {
+			if b.warn != nil {
+				b.warn(fmt.Sprintf("[SessionStore] dropping mirror frame: filePath %s is not under %s -- "+
+					"subprocess CLAUDE_CONFIG_DIR likely differs from parent (custom env / container?)", path, projectsDir))
+			}
+			continue
+		}
+		var lastErr error
+		for attempt := 0; attempt < mirrorAppendMaxAttempts; attempt++ {
+			if attempt > 0 {
+				time.Sleep(mirrorAppendBackoff[attempt-1])
+			}
+			actx, cancel := context.WithTimeout(ctx, mirrorSendTimeout)
+			lastErr = b.store.Append(actx, key, entries)
+			timedOut := errors.Is(actx.Err(), context.DeadlineExceeded)
+			cancel()
+			if lastErr == nil || timedOut {
+				break
+			}
+		}
+		if lastErr != nil {
+			k := key
+			errs = append(errs, &MirrorErrorMessage{Key: &k, Error: lastErr.Error()})
+		}
+	}
+	return errs
 }
 
 // filePathToSessionKey derives a SessionKey from a transcript file path under

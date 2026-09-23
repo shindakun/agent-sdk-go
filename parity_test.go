@@ -3,52 +3,8 @@ package claude
 import (
 	"context"
 	"encoding/json"
-	"strings"
 	"testing"
 )
-
-func TestFirstPromptFilteringSkipsSyntheticLines(t *testing.T) {
-	cases := []struct {
-		name    string
-		content string
-		want    string
-	}{
-		{"plain", "hello world", "hello world"},
-		{"local-command-stdout", "<local-command-stdout>output</local-command-stdout>", ""},
-		{"session-start-hook", "<session-start-hook>x", ""},
-		{"tick", "<tick>", ""},
-		{"goal", "<goal>do it</goal>", ""},
-		{"interrupt", "[Request interrupted by user for tool use]", ""},
-		{"ide_opened", "<ide_opened_file>foo.go</ide_opened_file>", ""},
-		{"ide_selection", "<ide_selection>sel</ide_selection>", ""},
-		{"newlines collapsed", "line1\nline2", "line1 line2"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			raw, _ := json.Marshal(map[string]any{"content": tc.content})
-			got := firstUserText(raw)
-			if got != tc.want {
-				t.Errorf("firstUserText(%q) = %q, want %q", tc.content, got, tc.want)
-			}
-		})
-	}
-}
-
-func TestFirstPromptCommandNameFallback(t *testing.T) {
-	raw, _ := json.Marshal(map[string]any{"content": "<command-name>review</command-name>"})
-	if got := firstUserText(raw); got != "review" {
-		t.Errorf("command fallback = %q, want review", got)
-	}
-}
-
-func TestFirstPromptTruncation(t *testing.T) {
-	long := strings.Repeat("a", 250)
-	raw, _ := json.Marshal(map[string]any{"content": long})
-	got := firstUserText(raw)
-	if len([]rune(got)) != 201 || !strings.HasSuffix(got, "…") { // 200 + ellipsis
-		t.Errorf("truncation wrong: len=%d suffix=%q", len([]rune(got)), got[len(got)-3:])
-	}
-}
 
 func TestRateLimitEventCamelCaseDecode(t *testing.T) {
 	line := []byte(`{"type":"rate_limit_event","uuid":"u1","session_id":"s1","rate_limit_info":{"status":"allowed_warning","resetsAt":123,"rateLimitType":"five_hour","utilization":0.8,"overageStatus":"allowed"}}`)
@@ -135,51 +91,6 @@ func TestFilePathToSessionKey(t *testing.T) {
 	}
 	if _, ok := filePathToSessionKey("/elsewhere/x.jsonl", projects); ok {
 		t.Error("path outside projects should not yield a key")
-	}
-}
-
-func TestFoldSessionSummary(t *testing.T) {
-	entries := []SessionStoreEntry{
-		{Data: json.RawMessage(`{"type":"user","timestamp":"2026-01-02T03:04:05Z","cwd":"/w","message":{"content":"real prompt"}}`)},
-	}
-	s := FoldSessionSummary(nil, SessionKey{ProjectKey: "p", SessionID: "s1"}, entries)
-	if s.SessionID != "s1" {
-		t.Errorf("session id = %q", s.SessionID)
-	}
-	if s.Data["first_prompt"] != "real prompt" {
-		t.Errorf("first_prompt = %v", s.Data["first_prompt"])
-	}
-	if s.Data["created_at"] == nil {
-		t.Error("created_at not latched")
-	}
-	if s.Data["cwd"] != "/w" {
-		t.Errorf("cwd = %v", s.Data["cwd"])
-	}
-	if s.Summary != "real prompt" {
-		t.Errorf("summary = %q", s.Summary)
-	}
-}
-
-func TestImportSessionToStore(t *testing.T) {
-	home := t.TempDir()
-	setHomeDir(t, home)
-	cwd := "/work/imp"
-	writeSession(t, home, cwd, "imp-1",
-		`{"type":"user","uuid":"u1","sessionId":"imp-1","message":{"content":"hi"}}`,
-		`{"type":"assistant","uuid":"a1","sessionId":"imp-1","message":{"content":[{"type":"text","text":"yo"}]}}`,
-	)
-
-	store := NewInMemorySessionStore()
-	if err := ImportSessionToStore(context.Background(), "imp-1", store, ImportDirectory(cwd), ImportBatchSize(1)); err != nil {
-		t.Fatalf("import: %v", err)
-	}
-	pk := ProjectKeyForDirectory(cwd)
-	entries, err := store.Load(context.Background(), SessionKey{ProjectKey: pk, SessionID: "imp-1"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(entries) != 2 {
-		t.Errorf("imported %d entries, want 2", len(entries))
 	}
 }
 

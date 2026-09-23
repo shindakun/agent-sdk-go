@@ -230,16 +230,34 @@ type McpServerInfo struct {
 	Version string `json:"version"`
 }
 
-// McpToolAnnotations describes a tool's behavior hints.
+// McpToolAnnotations is a tool's behavior hints as reported in MCP server
+// status (see [McpToolInfo]).
 type McpToolAnnotations struct {
 	ReadOnly    bool `json:"readOnly,omitempty"`
 	Destructive bool `json:"destructive,omitempty"`
 	OpenWorld   bool `json:"openWorld,omitempty"`
 }
 
-// ToolAnnotations is an alias of [McpToolAnnotations] for parity with the
-// official naming.
-type ToolAnnotations = McpToolAnnotations
+// ToolAnnotations are the MCP behavior hints an in-process [Tool] advertises.
+// A nil hint is not sent, so the MCP default applies (notably, a tool counts
+// as destructive and open-world unless it says otherwise). Use [Bool] to set
+// one.
+type ToolAnnotations struct {
+	Title           string `json:"title,omitempty"`
+	ReadOnlyHint    *bool  `json:"readOnlyHint,omitempty"`
+	DestructiveHint *bool  `json:"destructiveHint,omitempty"`
+	IdempotentHint  *bool  `json:"idempotentHint,omitempty"`
+	OpenWorldHint   *bool  `json:"openWorldHint,omitempty"`
+	// MaxResultSizeChars is a Claude Code hint rather than an MCP one: the
+	// size, in characters, up to which Claude Code keeps this tool's result
+	// inline instead of saving it to a file and showing a preview. It is sent
+	// in the tool's _meta, not with the annotations.
+	MaxResultSizeChars *int `json:"-"`
+}
+
+// Bool returns a pointer to v, for optional fields such as the
+// [ToolAnnotations] hints.
+func Bool(v bool) *bool { return &v }
 
 // McpToolInfo describes one tool offered by an MCP server.
 type McpToolInfo struct {
