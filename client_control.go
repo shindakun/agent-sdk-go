@@ -40,7 +40,7 @@ func (c *Client) SetPermissionMode(ctx context.Context, mode PermissionMode) err
 }
 
 // GetServerInfo returns the CLI's initialization info captured during
-// [Client.Connect] — available commands, output styles, and server
+// [Client.Connect]: available commands, output styles, and server
 // capabilities. It returns nil if the client is not connected.
 func (c *Client) GetServerInfo(ctx context.Context) (json.RawMessage, error) {
 	sess, err := c.session()
@@ -89,7 +89,13 @@ func (c *Client) McpToggle(ctx context.Context, serverName string, enabled bool)
 	return err
 }
 
-// StopTask stops a running task by id.
+// StopTask stops a running task by id, as read from its [TaskStartedMessage].
+//
+// The CLI then reports the task's end as a [TaskUpdatedMessage] with a
+// terminal status ("killed" for a stopped task). A [TaskNotificationMessage]
+// with status "stopped" may follow but is sometimes suppressed, so clear the
+// task id on a terminal status from either message (see
+// [IsTerminalTaskStatus]).
 func (c *Client) StopTask(ctx context.Context, taskID string) error {
 	_, err := c.sendControl(ctx, "stop_task", map[string]any{"task_id": taskID})
 	return err

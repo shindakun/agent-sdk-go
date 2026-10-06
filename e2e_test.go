@@ -29,6 +29,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/shindakun/agent-sdk-go/internal/transport"
 )
 
 func e2eSkip(t *testing.T) {
@@ -1311,5 +1313,237 @@ func TestE2EQueryMessagesImageContent(t *testing.T) {
 	}
 	if result == nil || result.IsError || !strings.Contains(strings.ToLower(result.Result), "red") {
 		t.Errorf("result = %+v", result)
+	}
+}
+
+// --- Run end (mirrors test_run_end.py) ----------------------------------------
+
+// runEndOpts are the shared options for the run-end tests: haiku, no setting
+// sources, strict MCP config, a terse system prompt.
+func runEndOpts(cwd string, extra ...Option) []Option {
+	return append([]Option{
+		WithCwd(cwd),
+		WithModel("haiku"),
+		WithSettingSources(),
+		WithStrictMcpConfig(),
+		WithSystemPrompt("Be terse. Follow the user's steps exactly."),
+	}, extra...)
+}
+
+// recordHook is a PreToolUse hook that records the tool and allows it, so the
+// call only goes through if the SDK was still there to answer the hook.
+func recordHook(mu *sync.Mutex, asked *[]string) HookCallback {
+	return func(ctx context.Context, input json.RawMessage, toolUseID string) (HookOutput, error) {
+		var in struct {
+			ToolName string `json:"tool_name"`
+		}
+		_ = json.Unmarshal(input, &in)
+		mu.Lock()
+		*asked = append(*asked, in.ToolName)
+		mu.Unlock()
+		return HookOutput{
+			HookSpecificOutput: json.RawMessage(`{"hookEventName":"PreToolUse","permissionDecision":"allow"}`),
+		}, nil
+	}
+}
+
+// recordingTransport records the session_state_changed frames the CLI writes,
+// including the sdk_host_only ones the SDK keeps out of the caller's stream.
+type recordingTransport struct {
+	transport.Transport
+	mu     sync.Mutex
+	frames []sessionState
+	out    chan transport.RawLine
+	once   sync.Once
+}
+
+func (r *recordingTransport) Read() <-chan transport.RawLine {
+	r.once.Do(func() {
+		r.out = make(chan transport.RawLine, 64)
+		in := r.Transport.Read()
+		go func() {
+			defer close(r.out)
+			for line := range in {
+				var probe struct {
+					Subtype string `json:"subtype"`
+					sessionState
+				}
+				if line.Err == nil && json.Unmarshal(line.Data, &probe) == nil && probe.Subtype == "session_state_changed" {
+					r.mu.Lock()
+					r.frames = append(r.frames, probe.sessionState)
+					r.mu.Unlock()
+				}
+				r.out <- line
+			}
+		}()
+	})
+	return r.out
+}
+
+func (r *recordingTransport) recorded() []sessionState {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.frames)
+}
+
+func recordSessionState(t *testing.T) *recordingTransport {
+	t.Helper()
+	rec := &recordingTransport{}
+	prev := transportFactory
+	transportFactory = func(cfg transport.Config) transport.Transport {
+		rec.Transport = prev(cfg)
+		return rec
+	}
+	t.Cleanup(func() { transportFactory = prev })
+	return rec
+}
+
+// A plain string prompt with a hook still completes with one result, and the
+// session-state frames the SDK asked for stay out of the stream.
+func TestE2EHookRunEndsWithOneResult(t *testing.T) {
+	e2eSkip(t)
+	ctx, cancel := e2eCtx(t)
+	defer cancel()
+	var mu sync.Mutex
+	var asked []string
+	msgs, err := Collect(ctx, "Reply with OK.", runEndOpts(t.TempDir(),
+		WithToolList(),
+		WithHooks(map[HookEvent][]HookMatcher{
+			HookPreToolUse: {{Callbacks: []HookCallback{recordHook(&mu, &asked)}}},
+		}),
+	)...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var results []*ResultMessage
+	for _, m := range msgs {
+		if r, ok := m.(*ResultMessage); ok {
+			results = append(results, r)
+		}
+		if parseSessionState(m) != nil {
+			t.Errorf("a session_state_changed frame leaked: %s", m.(*SystemMessage).Raw)
+		}
+	}
+	if len(results) != 1 || results[0].IsError {
+		t.Fatalf("results = %+v, want one success", results)
+	}
+}
+
+// The parent starts a background subagent and ends its turn. The subagent's
+// completion wakes it for a second turn, which writes a file: the hook for
+// that write must run, so stdin must still be open.
+//
+// sdk: the SDK asks for the state frames itself and hides them.
+// caller: the caller opted in with CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS and
+// sees them; the SDK reads the same frames to end the run.
+func TestE2EFollowUpTurnAfterBackgroundSubagentIsServed(t *testing.T) {
+	for _, callerOptedIn := range []bool{false, true} {
+		name := "sdk"
+		if callerOptedIn {
+			name = "caller"
+		}
+		t.Run(name, func(t *testing.T) {
+			e2eSkip(t)
+			// The variants differ only in WithEnv; keep the ambient
+			// environment from choosing for them.
+			for _, k := range []string{"CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS", "CLAUDE_CODE_SDK_READS_SESSION_STATE"} {
+				t.Setenv(k, "")
+				_ = os.Unsetenv(k)
+			}
+			rec := recordSessionState(t)
+			var mu sync.Mutex
+			var asked []string
+			cwd := t.TempDir()
+			target := filepath.Join(cwd, "out.txt")
+			env := map[string]string{}
+			if callerOptedIn {
+				env["CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS"] = "1"
+			}
+			prompt := "Step 1: call the Agent tool once with subagent_type `worker`, " +
+				"description `say done`, prompt `Say DONE.` and run_in_background true, " +
+				"then end your turn right away with the single word LAUNCHED. Do not wait " +
+				"for it. " +
+				"Step 2: when you are told the subagent finished, use the Write tool to " +
+				"write its reply to " + target + ", then answer FINISHED."
+
+			ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+			defer cancel()
+			msgs, err := Collect(ctx, prompt, runEndOpts(cwd,
+				WithToolList("Agent", "Write"),
+				WithHooks(map[HookEvent][]HookMatcher{
+					HookPreToolUse: {{Matcher: "Write", Callbacks: []HookCallback{recordHook(&mu, &asked)}}},
+				}),
+				WithAgents(map[string]AgentDefinition{"worker": {
+					Description: "Answers with one word.",
+					Prompt:      "Reply with the single word DONE and nothing else.",
+					Model:       "haiku",
+				}}),
+				WithEnv(env),
+			)...)
+
+			frames := rec.recorded()
+			if callerOptedIn && len(frames) == 0 {
+				t.Skip("this CLI sends no session_state_changed frames")
+			}
+			if !callerOptedIn && !slices.ContainsFunc(frames, func(f sessionState) bool { return f.SDKHostOnly }) {
+				t.Skip("this CLI predates CLAUDE_CODE_SDK_READS_SESSION_STATE " +
+					"(sent no sdk_host_only session_state_changed frames)")
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			var states []sessionState
+			firstResult, firstWrite := -1, -1
+			results := 0
+			for i, m := range msgs {
+				if s := parseSessionState(m); s != nil {
+					states = append(states, *s)
+				}
+				switch m := m.(type) {
+				case *ResultMessage:
+					results++
+					if m.IsError {
+						t.Errorf("error result: %+v", m)
+					}
+					if firstResult < 0 {
+						firstResult = i
+					}
+				case *AssistantMessage:
+					for _, b := range m.Content {
+						if tu, ok := b.(*ToolUseBlock); ok && tu.Name == "Write" && firstWrite < 0 {
+							firstWrite = i
+						}
+					}
+				}
+			}
+			if callerOptedIn {
+				if len(states) == 0 {
+					t.Error("the caller opted in, so it sees the state frames")
+				}
+				if slices.ContainsFunc(states, func(s sessionState) bool { return s.SDKHostOnly }) {
+					t.Errorf("an sdk_host_only frame reached the caller: %+v", states)
+				}
+			} else if len(states) != 0 {
+				t.Errorf("state frames leaked: %+v", states)
+			}
+			if results < 2 {
+				t.Fatalf("saw %d results, want at least 2", results)
+			}
+			// The Write must come from the follow-up turn, after the first result.
+			if firstWrite <= firstResult {
+				t.Errorf("first Write at %d, first result at %d; want the Write in the follow-up turn", firstWrite, firstResult)
+			}
+			// The hook grants the write, so the file only lands if it was
+			// served. The model may retry a write, so it can run more than once.
+			mu.Lock()
+			defer mu.Unlock()
+			if !slices.Contains(asked, "Write") {
+				t.Errorf("Write hook never ran: %v", asked)
+			}
+			if _, err := os.Stat(target); err != nil {
+				t.Errorf("target not written: %v", err)
+			}
+		})
 	}
 }

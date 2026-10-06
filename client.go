@@ -35,6 +35,10 @@ type Client struct {
 	closeOnce sync.Once
 	closeErr  error
 	closed    bool
+
+	// oneShot marks a Client driven by Query, whose stdin closes when the
+	// run ends.
+	oneShot bool
 }
 
 // NewClient creates an unconnected Client.
@@ -56,6 +60,9 @@ func (c *Client) Connect(ctx context.Context) error {
 	if err := sess.connect(ctx); err != nil {
 		return err
 	}
+	if c.oneShot && sess.needsBidirectional() {
+		sess.run = newRunTracker(runEndCeiling(c.opts.env))
+	}
 	c.sess = sess
 	c.out = make(chan Result, 64)
 	c.done = make(chan struct{})
@@ -71,6 +78,9 @@ func (c *Client) Connect(ctx context.Context) error {
 func (c *Client) readLoop() {
 	defer close(c.out)
 	defer close(c.done)
+	// The reader is gone, so no run-ending frame can arrive; wake the waiter
+	// (before out closes, so Query sees the run ended once its loop ends).
+	defer c.sess.run.finish()
 
 	lines := c.sess.messages()
 	inject := c.sess.injectCh // nil unless mirroring is active
@@ -79,7 +89,7 @@ func (c *Client) readLoop() {
 		select {
 		case m, ok := <-inject:
 			if ok {
-				c.out <- Result{Message: m}
+				c.send(Result{Message: m})
 			} else {
 				inject = nil
 			}
@@ -92,7 +102,7 @@ func (c *Client) readLoop() {
 				return
 			}
 			if err != nil {
-				c.out <- Result{Err: err}
+				c.send(Result{Err: err})
 				continue
 			}
 			if msg == nil {
@@ -100,11 +110,30 @@ func (c *Client) readLoop() {
 			}
 			c.captureSessionID(msg)
 			if _, isResult := msg.(*ResultMessage); isResult && c.sess.mirror != nil {
+				// Frames behind the flush go unobserved meanwhile.
+				c.sess.run.setBacklogged(true)
 				c.sess.mirror.Flush(context.Background())
+				c.sess.run.setBacklogged(false)
 			}
-			c.out <- Result{Message: msg}
+			if c.sess.observe(msg) {
+				continue
+			}
+			c.send(Result{Message: msg})
 		}
 	}
+}
+
+// send hands a message to the caller, telling the run tracker while a slow
+// caller holds the read loop up.
+func (c *Client) send(res Result) {
+	select {
+	case c.out <- res:
+		return
+	default:
+	}
+	c.sess.run.setBacklogged(true)
+	c.out <- res
+	c.sess.run.setBacklogged(false)
 }
 
 func (c *Client) captureSessionID(msg Message) {
@@ -189,9 +218,9 @@ func (c *Client) Messages(ctx context.Context) iter.Seq2[Message, error] {
 }
 
 // ReceiveResponse is like [Client.Messages] but terminates after the next
-// [ResultMessage] (which is itself yielded) — convenient for consuming a single
-// turn's response. If no result arrives, it iterates until ctx is canceled or
-// the session ends.
+// [ResultMessage] (which is itself yielded), which is convenient for consuming
+// a single turn's response. If no result arrives, it iterates until ctx is
+// canceled or the session ends.
 func (c *Client) ReceiveResponse(ctx context.Context) iter.Seq2[Message, error] {
 	inner := c.Messages(ctx)
 	return func(yield func(Message, error) bool) {

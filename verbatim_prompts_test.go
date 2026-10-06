@@ -103,7 +103,7 @@ func TestCLIVersionWarnings(t *testing.T) {
 		verbatim bool
 		want     []string // substrings, one per expected warning
 	}{
-		{"current, verbatim on", "2.1.280", nil, true, nil},
+		{"current, verbatim on", "2.1.291", nil, true, nil},
 		{"exact verbatim minimum", "2.1.248", nil, true, nil},
 		{"older than verbatim minimum", "2.1.247", nil, true, []string{"verbatim prompts are enabled"}},
 		{"older, verbatim off", "2.1.247", nil, false, nil},

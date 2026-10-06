@@ -134,6 +134,35 @@ func TestQueryYieldsResultErrorAfterErrorResult(t *testing.T) {
 	}
 }
 
+// The CLI sends a session_state_changed "idle" after the error result. A
+// frame marked sdk_host_only never reaches the caller, so the error result is
+// still the last message and the exit is a ResultError. An unmarked one (the
+// caller opted in) is a message like any other and clears it, as upstream.
+func TestResultErrorSurvivesHostOnlyIdle(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		hostOnly bool
+	}{{"sdk_host_only", true}, {"unmarked", false}} {
+		t.Run(c.name, func(t *testing.T) {
+			installExiting(t, &exitingTransport{
+				answer: true,
+				lines:  [][]byte{[]byte(errorResultLine), state("idle", c.hostOnly)},
+				exit:   &transport.ProcessError{ExitCode: 1, Stderr: "noise"},
+			})
+			var got error
+			for _, err := range Query(context.Background(), "hi") {
+				if err != nil {
+					got = err
+				}
+			}
+			var re *ResultError
+			if isRE := errors.As(got, &re); isRE != c.hostOnly {
+				t.Errorf("err = %T %v; ResultError = %v, want %v", got, got, isRE, c.hostOnly)
+			}
+		})
+	}
+}
+
 func TestQueryYieldsProcessErrorOnCrash(t *testing.T) {
 	installExiting(t, &exitingTransport{
 		answer: true,

@@ -14,6 +14,14 @@ import (
 // (binary discovery, connection, decode, or a non-zero CLI exit) are delivered
 // as the second value of the iterator and terminate iteration.
 //
+// With hooks, [WithCanUseTool] or SDK MCP servers, stdin stays open past the
+// result so the CLI can still ask the SDK questions: until the CLI reports the
+// session idle (a background agent's completion can wake a follow-up turn), or
+// until CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS (10 minutes by default, 0 for no
+// limit) passes between turns with the CLI still busy. A CLI that does not
+// report session state ends input at the first result with no background
+// agent in flight.
+//
 //	for msg, err := range claude.Query(ctx, "hello") {
 //	    if err != nil { return err }
 //	    // type-switch on msg
@@ -27,8 +35,9 @@ func Query(ctx context.Context, prompt string, opts ...Option) iter.Seq2[Message
 // QueryMessages is [Query] with streamed user messages instead of a string
 // prompt, the counterpart of passing an async iterable to the official
 // query(). See [Client.QueryMessages] for the message shape. Input ends once
-// every message is written (after the run-ending result when callbacks need
-// the control channel); if msgs yields nothing, it ends at once.
+// every message is written (when callbacks need the control channel, once the
+// last message's run has ended, as [Query] describes); if msgs yields nothing,
+// it ends at once.
 func QueryMessages(ctx context.Context, msgs iter.Seq[map[string]any], opts ...Option) iter.Seq2[Message, error] {
 	return runQuery(ctx, opts, func(ctx context.Context, c *Client) (int, error) {
 		sess, err := c.session()
@@ -48,6 +57,7 @@ func runQuery(ctx context.Context, opts []Option, send func(context.Context, *Cl
 		defer cancel()
 
 		client := NewClient(opts...)
+		client.oneShot = true
 		if err := client.Connect(ctx); err != nil {
 			yield(nil, err)
 			return
@@ -65,38 +75,44 @@ func runQuery(ctx context.Context, opts []Option, send func(context.Context, *Cl
 
 		// One-shot: end input so the CLI exits after the run. If the session
 		// needs bidirectional traffic (SDK MCP servers, hooks, or a permission
-		// callback), keep stdin open until a run-ending result; close it
-		// immediately otherwise, or when nothing was sent (no result would
-		// come to release it). This mirrors the official SDK.
-		bidi := client.sess.needsBidirectional() && written > 0
-		if !bidi {
+		// callback), keep stdin open until the run ends (see runTracker), on
+		// a goroutine woken by the read loop; close it immediately otherwise,
+		// or when nothing was sent (no result would come to release it). This
+		// mirrors the official SDK.
+		run := client.sess.run
+		waited := make(chan struct{})
+		stop := make(chan struct{})
+		if run == nil || written == 0 {
+			run.finish()
 			_ = client.sess.endInput()
-		}
-
-		var inflight inflightTasks
-		for msg, err := range client.Messages(ctx) {
-			if !yield(msg, err) {
-				return // consumer broke out; defer cancels + closes
-			}
-			if err != nil {
-				return
-			}
-			if !bidi {
-				continue
-			}
-			// Track task lifecycle frames so a result can tell "one turn
-			// ended" apart from "the run is done".
-			inflight.track(msg)
-			// A result frame ends one turn, not the run: a background task
-			// keeps running past it and still needs stdin for hook and SDK
-			// MCP control responses. Closing stdin here would silently
-			// bypass hooks and fail those tool calls. Each task completion
-			// wakes the parent for a follow-up turn, so a later result
-			// arrives with nothing in flight and closes stdin then.
-			if _, isResult := msg.(*ResultMessage); isResult && inflight.empty() {
+			close(waited)
+		} else {
+			go func() {
+				defer close(waited)
+				select {
+				case <-run.done():
+				case <-stop:
+					return
+				case <-ctx.Done():
+					return
+				}
+				run.finish()
 				_ = client.sess.endInput()
+			}()
+		}
+		defer func() {
+			close(stop)
+			<-waited
+		}()
+
+		for msg, err := range client.Messages(ctx) {
+			if !yield(msg, err) || err != nil {
+				return // defer stops the waiter, cancels + closes
 			}
 		}
+		// The stream ended, so the read loop finished the run; let the
+		// waiter close stdin before the deferred stop can race it.
+		<-waited
 	}
 }
 
@@ -120,14 +136,12 @@ var deferringTaskTypes = map[string]struct{}{
 // lifecycle frames, so [Query] can tell a turn-ending result from a run-ending
 // one. The zero value is ready to use.
 //
-// This is a mitigation, not a complete answer. An empty set means "nothing we
-// know of is running", which is not the same as "the run is over": a task that
-// settles before the turn's result frame leaves the set empty at that result,
-// so stdin closes even though the completion may still wake the parent for a
-// continuation turn. No ledger can close that gap, since it cannot distinguish
-// a settled task whose continuation is pending from no work at all; that needs
-// a run-boundary signal from the CLI. What this does fix is the common
-// ordering, where the task outlives the turn that spawned it.
+// An empty set means "nothing we know of is running", which is not the same as
+// "the run is over": a task that settles before the turn's result frame leaves
+// the set empty at that result, even though its completion may still wake the
+// parent for a follow-up turn. No ledger can close that gap; the CLI's session
+// state does (see runTracker), and this ledger remains the guard for CLIs that
+// do not report it.
 type inflightTasks struct {
 	ids map[string]struct{}
 }

@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 )
 
@@ -117,6 +118,14 @@ func (t *subprocessTransport) buildEnv() []string {
 	for k, v := range t.cfg.Env {
 		merged[k] = v
 	}
+	// Query waits for the CLI's session_state_changed "idle" before closing
+	// stdin on a run that serves control requests. Ask for the frames it
+	// drops (sdk_host_only) unless the caller chose a value, in any case;
+	// CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS stays the caller's own opt-in to
+	// seeing them.
+	if !namesEnv(t.cfg.Env, env, sdkReadsSessionStateEnv) {
+		merged[sdkReadsSessionStateEnv] = "1"
+	}
 	// Override or append.
 	out := make([]string, 0, len(env)+len(merged))
 	seen := map[string]bool{}
@@ -134,6 +143,26 @@ func (t *subprocessTransport) buildEnv() []string {
 		}
 	}
 	return out
+}
+
+// sdkReadsSessionStateEnv asks the CLI for session_state_changed frames marked
+// sdk_host_only. CLIs that predate it send none.
+const sdkReadsSessionStateEnv = "CLAUDE_CODE_SDK_READS_SESSION_STATE"
+
+// namesEnv reports whether the caller's env or the process environment names
+// key, ignoring case.
+func namesEnv(cfgEnv map[string]string, processEnv []string, key string) bool {
+	for k := range cfgEnv {
+		if strings.EqualFold(k, key) {
+			return true
+		}
+	}
+	for _, kv := range processEnv {
+		if k, _, _ := strings.Cut(kv, "="); strings.EqualFold(k, key) {
+			return true
+		}
+	}
+	return false
 }
 
 func indexByte(s string, b byte) int {

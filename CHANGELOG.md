@@ -5,6 +5,42 @@ All notable changes to this project are documented here. The format is based on
 
 ## Unreleased
 
+## [v0.4.1] - 2026-10-06
+
+### Fixed
+
+- **A one-shot `Query` with hooks, `WithCanUseTool` or SDK MCP servers keeps
+  stdin open until the CLI reports the session idle**, so a follow-up turn is
+  served. A background subagent that finished just before the turn's result
+  still wakes the session for another turn; stdin used to close at that
+  result, and the follow-up turn's hook, permission and SDK MCP requests then
+  failed with "Stream closed". The SDK now sets
+  `CLAUDE_CODE_SDK_READS_SESSION_STATE=1` (unless `WithEnv` or the process
+  environment names it, in any case; `0` opts out) and ends the run at the
+  `idle` that follows a result. The `session_state_changed` frames the CLI
+  sends for this are marked `sdk_host_only` and kept out of the stream for
+  both `Query` and `Client`; unmarked ones, from a caller that set
+  `CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS`, still pass through. The wait
+  between turns is bounded by `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS` (from
+  `WithEnv`, then the environment; default 10 minutes, `0` for no limit). A
+  CLI that sends no state closes stdin at the first result with no tracked
+  task in flight, as before. Stdin is now closed from the read loop, so the
+  close no longer waits on how fast the caller consumes messages, and the
+  ceiling does not fire while a slow caller holds unread frames back. Two
+  safeguards go beyond upstream: a tracked agent that settles after `idle`
+  with no follow-up turn ends the run at the ceiling instead of holding stdin
+  open indefinitely, and the `ResultError` for an error result survives the
+  `idle` frame the CLI sends after it. Ports upstream `dbc975e`.
+
+### Changed
+
+- `SupportedCLIVersion` is now `2.1.291` (upstream CLI bumps 2.1.281 through
+  2.1.291; no SDK-source changes besides `dbc975e` and the docstring-only
+  `5889056`, whose `StopTask` and `WithModel` doc corrections are ported).
+- `TestIntegrationCanUseToolShadowWarning` reads a temp file instead of
+  `/etc/hostname`, which macOS lacks; the model then fell back to `Bash`,
+  which the callback rightly saw.
+
 ## [v0.4.0] - 2026-09-22
 
 ### Added
