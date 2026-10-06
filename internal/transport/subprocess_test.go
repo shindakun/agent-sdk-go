@@ -70,8 +70,8 @@ func TestSubprocessTransportRoundTrip(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = tr.Close() })
 
-	// Send the initialize handshake, then a user prompt — same order the real
-	// session driver uses.
+	// Send the initialize handshake, then a user prompt, in the same order the
+	// real session driver uses.
 	initReq := `{"type":"control_request","request_id":"req_1_aabbccdd","request":{"subtype":"initialize"}}`
 	if err := tr.Write(ctx, []byte(initReq)); err != nil {
 		t.Fatalf("write init: %v", err)
@@ -131,4 +131,47 @@ func asCLINotFound(err error, target **CLINotFoundError) bool {
 		*target = e
 	}
 	return ok
+}
+
+// The SDK asks the CLI for sdk_host_only session_state_changed frames unless
+// the caller's env or the process environment already names the variable, in
+// any case; it never sets CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS.
+func TestBuildEnvSDKReadsSessionState(t *testing.T) {
+	lookup := func(env []string, key string) (string, bool) {
+		for _, kv := range env {
+			if k, v, ok := strings.Cut(kv, "="); ok && k == key {
+				return v, true
+			}
+		}
+		return "", false
+	}
+	cases := []struct {
+		name    string
+		cfgEnv  map[string]string
+		procEnv string // "" leaves the process env unset
+		key     string
+		want    string
+	}{
+		{"set by default", nil, "", sdkReadsSessionStateEnv, "1"},
+		{"caller opts out", map[string]string{sdkReadsSessionStateEnv: "0"}, "", sdkReadsSessionStateEnv, "0"},
+		{"caller names it in another case", map[string]string{"claude_code_sdk_reads_session_state": "0"}, "", sdkReadsSessionStateEnv, ""},
+		{"process env wins", nil, "0", sdkReadsSessionStateEnv, "0"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Setenv(sdkReadsSessionStateEnv, c.procEnv)
+			if c.procEnv == "" {
+				_ = os.Unsetenv(sdkReadsSessionStateEnv)
+			}
+			tr := &subprocessTransport{cfg: Config{Env: c.cfgEnv}}
+			env := tr.buildEnv()
+			got, _ := lookup(env, c.key)
+			if got != c.want {
+				t.Errorf("%s = %q, want %q", c.key, got, c.want)
+			}
+			if _, ok := lookup(env, "CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS"); ok && os.Getenv("CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS") == "" {
+				t.Error("the SDK must not set CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS")
+			}
+		})
+	}
 }

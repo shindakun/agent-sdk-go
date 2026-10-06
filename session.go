@@ -45,6 +45,9 @@ type session struct {
 	// mcpStates holds per-server connection state for in-process MCP servers.
 	mcpMu     sync.Mutex
 	mcpStates map[string]*mcpServerState
+	// run decides when a one-shot Query that serves control requests may
+	// close stdin; nil otherwise. Set before the read loop starts.
+	run *runTracker
 }
 
 func newSession(opts *Options) *session {
@@ -222,6 +225,7 @@ func (s *session) sendPromptSession(ctx context.Context, prompt, sessionID strin
 	if err != nil {
 		return err
 	}
+	s.run.promptWritten()
 	return s.t.Write(ctx, b)
 }
 
@@ -249,6 +253,7 @@ func (s *session) sendMessages(ctx context.Context, msgs iter.Seq[map[string]any
 		if err != nil {
 			return n, err
 		}
+		s.run.promptWritten()
 		if err := s.t.Write(ctx, b); err != nil {
 			return n, err
 		}
@@ -274,6 +279,17 @@ func (s *session) endInput() error {
 // CanUseTool callback).
 func (s *session) needsBidirectional() bool {
 	return len(s.opts.sdkMcpServers()) > 0 || len(s.registry.hooks) > 0 || s.opts.canUseTool != nil
+}
+
+// observe feeds one decoded message to the run tracker and reports whether it
+// is hidden from the caller: a session_state_changed frame marked
+// sdk_host_only, which the CLI sent only because the transport asked for it
+// (CLAUDE_CODE_SDK_READS_SESSION_STATE). Unmarked ones, from a caller that set
+// CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS, pass through; both drive the run end.
+func (s *session) observe(msg Message) (hidden bool) {
+	st := parseSessionState(msg)
+	s.run.observe(msg, st)
+	return st != nil && st.SDKHostOnly
 }
 
 // messages returns the raw message-line channel from the engine.

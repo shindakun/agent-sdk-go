@@ -110,7 +110,7 @@ func newOptions(opts ...Option) *Options {
 	return o
 }
 
-// WithModel sets the model (for example "claude-sonnet-4-6" or an alias like
+// WithModel sets the model (for example "claude-sonnet-5" or an alias like
 // "opus").
 func WithModel(model string) Option {
 	return func(o *Options) { o.model = model }

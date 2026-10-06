@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 )
 
 // TestInflightTasksTrack covers the lifecycle transitions that decide whether a
@@ -110,7 +111,7 @@ func TestResultWithInflightTaskKeepsStdinOpen(t *testing.T) {
 	}
 	for name, drain := range drains {
 		t.Run(name, func(t *testing.T) {
-			st := newScriptedTransport(
+			script := [][]byte{
 				[]byte(`{"type":"system","subtype":"init","session_id":"s1","tools":["Task"]}`),
 				[]byte(`{"type":"system","subtype":"task_started","task_id":"t1","task_type":"local_agent","session_id":"s1"}`),
 				// Turn-ending result: a task is still in flight, so stdin must stay open.
@@ -118,77 +119,68 @@ func TestResultWithInflightTaskKeepsStdinOpen(t *testing.T) {
 				drain,
 				// Run-ending result: nothing in flight, so stdin closes here.
 				[]byte(`{"type":"result","subtype":"success","is_error":false,"result":"done","session_id":"s1"}`),
-			)
-			restore := installScriptedTransport(st)
-			defer restore()
-
-			// A hook makes the session bidirectional, which is the mode that
-			// defers the close.
-			hook := func(ctx context.Context, input json.RawMessage, toolUseID string) (HookOutput, error) {
-				return HookOutput{}, nil
 			}
-
-			var afterFirstResult int
+			_, seen := runGated(t, script, 3, func(st *scriptedTransport) {
+				// With the bug, the first result closed stdin.
+				assertStdinOpen(t, st, "a task was in flight at the turn-ending result")
+			})
 			results := 0
-			for msg, err := range Query(context.Background(), "go",
-				WithHooks(map[HookEvent][]HookMatcher{
-					HookPreToolUse: {{Callbacks: []HookCallback{hook}}},
-				}),
-			) {
-				if err != nil {
-					t.Fatalf("query err: %v", err)
-				}
-				if _, ok := msg.(*ResultMessage); ok {
+			for _, m := range seen {
+				if _, ok := m.(*ResultMessage); ok {
 					results++
-					if results == 2 {
-						// Sampled at the second result: by now the loop body
-						// has fully processed the first one. With the bug,
-						// that first result closed stdin and this reads 1.
-						afterFirstResult = st.endInputCount()
-					}
 				}
-
 			}
-
 			if results != 2 {
 				t.Fatalf("saw %d results, want 2", results)
 			}
-			if afterFirstResult != 0 {
-				t.Errorf("stdin was closed on the turn-ending result (%d EndInput calls); "+
-					"a task was in flight and still needed the control channel", afterFirstResult)
-			}
-			if got := st.endInputCount(); got == 0 {
-				t.Error("stdin never closed; the run-ending result must close it")
-			}
 		})
+	}
+}
+
+// withTestHook registers a no-op PreToolUse hook. A hook makes the session
+// bidirectional, which is the mode that defers closing stdin.
+func withTestHook() Option {
+	hook := func(ctx context.Context, input json.RawMessage, toolUseID string) (HookOutput, error) {
+		return HookOutput{}, nil
+	}
+	return WithHooks(map[HookEvent][]HookMatcher{
+		HookPreToolUse: {{Callbacks: []HookCallback{hook}}},
+	})
+}
+
+// assertStdinOpen checks that stdin stays open for a short window. The close
+// happens on a goroutine woken by the read loop, so an immediate read could
+// miss a close already on its way.
+func assertStdinOpen(t *testing.T, st *scriptedTransport, why string) {
+	t.Helper()
+	deadline := time.Now().Add(100 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if n := st.endInputCount(); n != 0 {
+			t.Fatalf("stdin closed early (%d EndInput calls): %s", n, why)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// waitStdinClosed waits for stdin to close, failing after d.
+func waitStdinClosed(t *testing.T, st *scriptedTransport, d time.Duration, why string) {
+	t.Helper()
+	deadline := time.Now().Add(d)
+	for st.endInputCount() == 0 {
+		if time.Now().After(deadline) {
+			t.Fatalf("stdin did not close within %v: %s", d, why)
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }
 
 // With no tasks in flight the first result still closes stdin, so the ordinary
 // one-shot path is unchanged.
 func TestResultWithNoTasksClosesStdin(t *testing.T) {
-	st := newScriptedTransport(
+	runGated(t, [][]byte{
 		[]byte(`{"type":"system","subtype":"init","session_id":"s1","tools":["Read"]}`),
 		[]byte(`{"type":"result","subtype":"success","is_error":false,"result":"hi","session_id":"s1"}`),
-	)
-	restore := installScriptedTransport(st)
-	defer restore()
-
-	hook := func(ctx context.Context, input json.RawMessage, toolUseID string) (HookOutput, error) {
-		return HookOutput{}, nil
-	}
-	for _, err := range Query(context.Background(), "hi",
-		WithHooks(map[HookEvent][]HookMatcher{
-			HookPreToolUse: {{Callbacks: []HookCallback{hook}}},
-		}),
-	) {
-		if err != nil {
-			t.Fatalf("query err: %v", err)
-		}
-	}
-	if st.endInputCount() == 0 {
-		t.Error("the first result must close stdin when nothing is in flight")
-	}
+	}, -1, nil)
 }
 
 // TestTaskNotificationSystemSubtype pins the wire shape: the CLI emits

@@ -462,14 +462,26 @@ func TestIntegrationCanUseToolShadowWarning(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	var consulted atomic.Bool
+	var (
+		mu        sync.Mutex
+		consulted []string
+	)
 	cb := func(ctx context.Context, tool string, input json.RawMessage, pc PermissionContext) (PermissionResult, error) {
-		consulted.Store(true)
+		mu.Lock()
+		consulted = append(consulted, tool)
+		mu.Unlock()
 		return PermissionAllow{}, nil
 	}
 
+	// A file that exists on every OS, so the model has no reason to fall
+	// back to another tool (/etc/hostname is missing on macOS).
+	target := filepath.Join(t.TempDir(), "hostname.txt")
+	if err := os.WriteFile(target, []byte("parity-host\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
 	var stderr lockedBuffer
-	if _, err := Collect(ctx, "Read the file /etc/hostname and report its first line.",
+	if _, err := Collect(ctx, "Read the file "+target+" with the Read tool and report its first line.",
 		WithCanUseTool(cb),
 		WithAllowedTools("Read"),
 		WithStderr(&stderr),
@@ -484,8 +496,10 @@ func TestIntegrationCanUseToolShadowWarning(t *testing.T) {
 	if !strings.Contains(out, "Read") {
 		t.Errorf("warning does not name the shadowed tool; got:\n%s", out)
 	}
-	if consulted.Load() {
-		t.Error("callback was consulted; expected Read to be auto-approved (the shadowing this warns about)")
+	mu.Lock()
+	defer mu.Unlock()
+	if slices.Contains(consulted, "Read") {
+		t.Errorf("callback was consulted for Read (all calls: %v); expected Read to be auto-approved (the shadowing this warns about)", consulted)
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestQueryEndToEndScripted(t *testing.T) {
@@ -244,10 +245,14 @@ func TestCanUseToolAloneKeepsStdinOpenUntilResult(t *testing.T) {
 		[]byte(`{"type":"system","subtype":"init","session_id":"s1","tools":["Write"]}`),
 		[]byte(`{"type":"result","subtype":"success","is_error":false,"result":"ok","session_id":"s1"}`),
 	)
+	// Hold the result back until stdin has been checked, and the EOF until
+	// the result has closed it (at EOF the run ends regardless).
+	st.afterPrompt = true
+	release, eof := make(chan struct{}), make(chan struct{})
+	st.gates = map[int]chan struct{}{1: release, 2: eof}
 	restore := installScriptedTransport(st)
 	defer restore()
 
-	beforeResult := -1
 	for msg, err := range Query(context.Background(), "go",
 		WithCanUseTool(func(ctx context.Context, tool string, in json.RawMessage, pc PermissionContext) (PermissionResult, error) {
 			return PermissionAllow{}, nil
@@ -256,15 +261,14 @@ func TestCanUseToolAloneKeepsStdinOpenUntilResult(t *testing.T) {
 		if err != nil {
 			t.Fatalf("query err: %v", err)
 		}
-		if _, ok := msg.(*SystemMessage); ok {
-			beforeResult = st.endInputCount()
+		switch msg.(type) {
+		case *SystemMessage:
+			assertStdinOpen(t, st, "no result has arrived yet")
+			close(release)
+		case *ResultMessage:
+			waitStdinClosed(t, st, 2*time.Second, "the result must close stdin")
+			close(eof)
 		}
-	}
-	if beforeResult != 0 {
-		t.Errorf("stdin closed before the result (%d EndInput calls)", beforeResult)
-	}
-	if st.endInputCount() == 0 {
-		t.Error("stdin never closed after the result")
 	}
 }
 

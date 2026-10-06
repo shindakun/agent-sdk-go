@@ -27,7 +27,7 @@ levels — names, fields, and enum values — using AST extraction, not eyeballi
 
 Addresses [claude-agent-sdk-python#498](https://github.com/anthropics/claude-agent-sdk-python/issues/498).
 
-**Verified against Claude Code CLI 2.1.280**, the version the upstream SDK
+**Verified against Claude Code CLI 2.1.291**, the version the upstream SDK
 bundles (`_cli_version.py`), matching the installed binary. In addition to the
 static checks above, the integration and e2e suites run the **real binary**; the
 e2e suite ports every file in upstream's `e2e-tests/` (table below). Static
@@ -185,6 +185,7 @@ Two test tiers run against the real `claude` binary:
 | `test_message_origin.py` | `TestE2EResultOriginRoundTrip` (the stamped frame is written directly; the Go API sends string prompts) |
 | `test_session_store_resume_settings.py` | `TestE2ESessionStoreResumeAppliesUserSettings` |
 | `test_verbatim_prompts.py` | `TestE2EAtPathExpandedByDefault`, `TestE2EVerbatimQueryNotExpanded`, `TestE2EVerbatimClientNotExpanded` |
+| `test_run_end.py` | `TestE2EHookRunEndsWithOneResult`, `TestE2EFollowUpTurnAfterBackgroundSubagentIsServed` (`sdk` and `caller` variants) |
 | `test_tool_permissions.py` | `TestIntegrationCanUseToolOnlyStringPrompt`, `TestIntegrationCanUseToolDeny` (integration tier) |
 | (plugins) | `TestE2EPluginLoaded` |
 

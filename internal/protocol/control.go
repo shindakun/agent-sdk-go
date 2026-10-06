@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -144,8 +145,13 @@ func (e *Engine) readLoop() {
 
 // trackErrorResult records line if it is a result with is_error, and clears
 // the record for any other message, so only an error result that is the last
-// message before exit counts.
+// message before exit counts. A session_state_changed frame marked
+// sdk_host_only (the "idle" the CLI sends after an error result) is not a
+// message the caller sees, so it leaves the record alone, as upstream.
 func (e *Engine) trackErrorResult(typ string, line []byte) {
+	if typ == "system" && isHostOnlySessionState(line) {
+		return
+	}
 	e.lastErrorResult = nil
 	if typ != "result" {
 		return
@@ -156,6 +162,19 @@ func (e *Engine) trackErrorResult(typ string, line []byte) {
 	if json.Unmarshal(line, &r) == nil && r.IsError {
 		e.lastErrorResult = append([]byte(nil), line...)
 	}
+}
+
+// isHostOnlySessionState reports whether line is a session_state_changed frame
+// marked sdk_host_only.
+func isHostOnlySessionState(line []byte) bool {
+	if !bytes.Contains(line, []byte("session_state_changed")) {
+		return false
+	}
+	var f struct {
+		Subtype     string `json:"subtype"`
+		SDKHostOnly bool   `json:"sdk_host_only"`
+	}
+	return json.Unmarshal(line, &f) == nil && f.Subtype == "session_state_changed" && f.SDKHostOnly
 }
 
 func (e *Engine) dispatch(line []byte) {

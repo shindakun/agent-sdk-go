@@ -20,6 +20,15 @@ type scriptedTransport struct {
 	// controlResponder, if set, produces the response payload for an inbound
 	// control request given its decoded subtype; nil yields an empty success.
 	controlResponder func(subtype string, payload json.RawMessage) json.RawMessage
+	// gates, if set, holds back script line i until gates[i] is closed, so a
+	// test can inspect state between frames. Index len(script) holds back the
+	// EOF. reached, if set, is signaled with i as the replay stops at gate i.
+	gates   map[int]chan struct{}
+	reached chan int
+	// afterPrompt replays the script once the first user prompt is written
+	// rather than once initialize is answered, so frames cannot overtake the
+	// prompt as they cannot with a real CLI.
+	afterPrompt bool
 
 	ch        chan transport.RawLine
 	mu        sync.Mutex
@@ -61,6 +70,10 @@ func (s *scriptedTransport) Write(ctx context.Context, obj []byte) error {
 	if err := json.Unmarshal(obj, &probe); err != nil {
 		return nil
 	}
+	if probe.Type == "user" && s.afterPrompt {
+		s.startScript()
+		return nil
+	}
 	if probe.Type != "control_request" {
 		return nil
 	}
@@ -89,23 +102,40 @@ func (s *scriptedTransport) Write(ctx context.Context, obj []byte) error {
 	s.ch <- transport.RawLine{Data: b}
 
 	// After the initialize handshake, replay the scripted output once.
-	if sub.Subtype == "initialize" {
-		s.mu.Lock()
-		already := s.scriptOut
-		s.scriptOut = true
-		s.mu.Unlock()
-		if !already {
-			go s.flushScript()
-		}
+	if sub.Subtype == "initialize" && !s.afterPrompt {
+		s.startScript()
 	}
 	return nil
 }
 
+func (s *scriptedTransport) startScript() {
+	s.mu.Lock()
+	already := s.scriptOut
+	s.scriptOut = true
+	s.mu.Unlock()
+	if !already {
+		go s.flushScript()
+	}
+}
+
 func (s *scriptedTransport) flushScript() {
-	for _, line := range s.script {
+	for i, line := range s.script {
+		s.waitGate(i)
 		s.ch <- transport.RawLine{Data: append([]byte(nil), line...)}
 	}
+	s.waitGate(len(s.script))
 	s.ch <- transport.RawLine{Err: io.EOF}
+}
+
+func (s *scriptedTransport) waitGate(i int) {
+	g, ok := s.gates[i]
+	if !ok {
+		return
+	}
+	if s.reached != nil {
+		s.reached <- i
+	}
+	<-g
 }
 
 func (s *scriptedTransport) EndInput() error {
