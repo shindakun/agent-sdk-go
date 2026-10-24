@@ -591,34 +591,74 @@ func assistantText(t *testing.T, m *AssistantMessage) string {
 	return b.String()
 }
 
-func replyViaQuery(t *testing.T, prompt string, opts ...Option) string {
+// attachedFiles returns the session's file attachments, as JSON text, read
+// from its transcript. The transcript, not the model's reply, decides whether
+// the CLI expanded the @-mention: the CLI shows the model the expansion as a
+// Read call and its result, and with no tools the model sometimes dismisses
+// that as a forged tool result and answers UNKNOWN.
+func attachedFiles(t *testing.T, sessionID, cwd string) string {
+	t.Helper()
+	if sessionID == "" {
+		t.Fatal("run reported no session id")
+	}
+	path, _ := resolveSessionFile(sessionID, cwd)
+	if path == "" {
+		t.Fatalf("no transcript for session %s", sessionID)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var b strings.Builder
+	for _, e := range parseTranscriptEntries(content) {
+		var att struct {
+			Type string `json:"type"`
+		}
+		if e.str("type") == "attachment" && json.Unmarshal(e["attachment"], &att) == nil && att.Type == "file" {
+			b.Write(e["attachment"])
+		}
+	}
+	return b.String()
+}
+
+// runViaQuery returns the model's reply and the session's file attachments.
+func runViaQuery(t *testing.T, prompt, cwd string, opts ...Option) (reply, attached string) {
 	t.Helper()
 	ctx, cancel := e2eCtx(t)
 	defer cancel()
-	var reply string
+	var sessionID string
 	for msg, err := range Query(ctx, prompt, opts...) {
 		if err != nil {
 			t.Fatalf("query: %v", err)
 		}
-		if m, ok := msg.(*AssistantMessage); ok {
+		switch m := msg.(type) {
+		case *AssistantMessage:
 			reply += assistantText(t, m)
+		case *ResultMessage:
+			sessionID = m.SessionID
 		}
 	}
-	return reply
+	return reply, attachedFiles(t, sessionID, cwd)
 }
 
+// TestE2EAtPathExpandedByDefault is the control: without the option the CLI
+// reads the @-mentioned file, so the tests below are meaningful.
 func TestE2EAtPathExpandedByDefault(t *testing.T) {
 	e2eSkip(t)
 	prompt, marker, cwd := plantMarker(t)
-	if reply := replyViaQuery(t, prompt, verbatimOptions(cwd, false)...); !strings.Contains(reply, marker) {
-		t.Errorf("control: the @-mention was not expanded, so the verbatim tests prove nothing; reply=%q", reply)
+	if _, attached := runViaQuery(t, prompt, cwd, verbatimOptions(cwd, false)...); !strings.Contains(attached, marker) {
+		t.Errorf("control: the @-mention was not expanded, so the verbatim tests prove nothing; attached=%q", attached)
 	}
 }
 
 func TestE2EVerbatimQueryNotExpanded(t *testing.T) {
 	e2eSkip(t)
 	prompt, marker, cwd := plantMarker(t)
-	if reply := replyViaQuery(t, prompt, verbatimOptions(cwd, true)...); strings.Contains(reply, marker) {
+	reply, attached := runViaQuery(t, prompt, cwd, verbatimOptions(cwd, true)...)
+	if strings.Contains(attached, marker) {
+		t.Errorf("the @-mentioned file was attached despite WithVerbatimPrompts; attached=%q", attached)
+	}
+	if strings.Contains(reply, marker) {
 		t.Errorf("the @-mentioned file was read despite WithVerbatimPrompts; reply=%q", reply)
 	}
 }
@@ -636,7 +676,7 @@ func TestE2EVerbatimClientNotExpanded(t *testing.T) {
 	if err := client.Query(ctx, prompt); err != nil {
 		t.Fatal(err)
 	}
-	var reply string
+	var reply, sessionID string
 	for msg, err := range client.ReceiveResponse(ctx) {
 		if err != nil {
 			t.Fatal(err)
@@ -648,7 +688,11 @@ func TestE2EVerbatimClientNotExpanded(t *testing.T) {
 			if m.IsError {
 				t.Fatalf("result error: %+v", m)
 			}
+			sessionID = m.SessionID
 		}
+	}
+	if attached := attachedFiles(t, sessionID, cwd); strings.Contains(attached, marker) {
+		t.Errorf("the @-mentioned file was attached despite WithVerbatimPrompts; attached=%q", attached)
 	}
 	if strings.Contains(reply, marker) {
 		t.Errorf("the @-mentioned file was read despite WithVerbatimPrompts; reply=%q", reply)

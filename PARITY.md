@@ -99,7 +99,7 @@ Notable wire details verified against the source:
 | `ToolAnnotations` (MCP hints + `maxResultSizeChars`) | `ToolAnnotations` (`maxResultSizeChars` sent in `_meta`) |
 | `AgentDefinition` | `AgentDefinition` (full field set) |
 | `SdkPluginConfig` | `SdkPluginConfig`, `WithPlugins` |
-| `SandboxSettings`, `SandboxNetworkConfig`, `SandboxIgnoreViolations` | same (`WithSandbox`) |
+| `SandboxSettings`, `SandboxNetworkConfig`, `SandboxIgnoreViolations` | same (`WithSandbox`); `SandboxIgnoreViolations` is `map[string][]string`, command pattern to violation substrings |
 
 ## Permissions & hooks
 
@@ -188,7 +188,7 @@ Two test tiers run against the real `claude` binary:
 | `test_conversation_reset.py` | `TestE2EClearEmitsConversationReset` |
 | `test_message_origin.py` | `TestE2EResultOriginRoundTrip` (the stamped frame is written directly; the Go API sends string prompts) |
 | `test_session_store_resume_settings.py` | `TestE2ESessionStoreResumeAppliesUserSettings` |
-| `test_verbatim_prompts.py` | `TestE2EAtPathExpandedByDefault`, `TestE2EVerbatimQueryNotExpanded`, `TestE2EVerbatimClientNotExpanded` (keeps the pre-`a8e7ce3` control prompt: upstream's rewording made the control answer UNKNOWN more often against CLI 2.1.310) |
+| `test_verbatim_prompts.py` | `TestE2EAtPathExpandedByDefault`, `TestE2EVerbatimQueryNotExpanded`, `TestE2EVerbatimClientNotExpanded` (decided from the transcript's file attachments, as upstream since `f33ec2b`) |
 | `test_run_end.py` | `TestE2EHookRunEndsWithOneResult`, `TestE2EFollowUpTurnAfterBackgroundSubagentIsServed` (`sdk` and `caller` variants) |
 | `test_tool_permissions.py` | `TestIntegrationCanUseToolOnlyStringPrompt`, `TestIntegrationCanUseToolDeny` (integration tier) |
 | (plugins) | `TestE2EPluginLoaded` |
