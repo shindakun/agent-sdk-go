@@ -15,6 +15,20 @@ All notable changes to this project are documented here. The format is based on
   `SystemInitPluginError`, `SystemInitPlugin` (an alias of `PluginInfo`),
   and the `FastModeState` / `FastModeDisabledReason` constants.
   `PluginInfo` gains `Version`. Ports upstream `033b8ed`.
+- **Hook-specific output types** for `UserPromptExpansion`, `PostToolBatch`,
+  `Stop`, `SubagentStop`, `PermissionDenied`, `PreModelSwitch`,
+  `PostModelSwitch`, `Elicitation`, `ElicitationResult`, `CwdChanged`,
+  `FileChanged`, `WorktreeCreate` and `MessageDisplay`.
+  `UserPromptSubmitHookSpecificOutput` gains `SessionTitle` and
+  `SuppressOriginalPrompt`; `SessionStartHookSpecificOutput` gains
+  `InitialUserMessage`, `SessionTitle`, `WatchPaths` and `ReloadSkills`.
+- **Hook input fields**: `BaseHookInput.PromptID` and `Effort`
+  (`HookEffort`); `DurationMs` on `PostToolUseHookInput` and
+  `PostToolUseFailureHookInput`; `LastAssistantMessage`, `BackgroundTasks`
+  (`BackgroundTaskSummary`) and `SessionCrons` (`SessionCronSummary`) on
+  `StopHookInput` and `SubagentStopHookInput`. Ports upstream `a8e7ce3`'s
+  types. Its reworded prompt for the verbatim-prompts e2e control test is not
+  ported: against CLI 2.1.310 it passed 5 of 8 runs, the current prompt 7 of 7.
 
 ### Changed
 

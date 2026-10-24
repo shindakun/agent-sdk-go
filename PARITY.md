@@ -5,10 +5,8 @@ This maps the Go port name-for-name against the reference
 Parity is **mechanically verified** against a clone of the source at three
 levels — names, fields, and enum values — using AST extraction, not eyeballing:
 
-- Public names (`__all__`): **139/159** accounted for: 133 with a Go
-  equivalent, 6 documented N/A below. The other 20, upstream's hook-specific
-  output types (`a8e7ce3`), are not ported yet
-  ([#38](https://github.com/shindakun/agent-sdk-go/issues/38)).
+- Public names (`__all__`): **159/159** accounted for: 153 with a Go
+  equivalent, 6 documented N/A below.
 - `ClaudeAgentOptions` fields: **49/49** covered (`debug_stderr` N/A below).
   `output_format`'s JSON schema is `WithJSONSchema`; `thinking` is
   `WithThinkingConfig`.
@@ -110,6 +108,8 @@ Notable wire details verified against the source:
 | `CanUseTool`, `ToolPermissionContext`, `PermissionResult`, `PermissionResultAllow`, `PermissionResultDeny`, `PermissionUpdate` | `CanUseTool`, `PermissionContext`, `PermissionResult`, `PermissionAllow`, `PermissionDeny`, `PermissionUpdate` |
 | `HookCallback`, `HookMatcher`, `HookContext`, hook event consts | `HookCallback`, `HookMatcher`, `HookOutput`, `HookEvent` consts |
 | `PreToolUseHookInput`, `PostToolUseHookInput`, `UserPromptSubmitHookInput`, `StopHookInput`, `SubagentStopHookInput`, `PreCompactHookInput`, `NotificationHookInput`, `SubagentStartHookInput`, `PermissionRequestHookInput`, `BaseHookInput` | same + `Decode*` helpers |
+| `HookEffort`, `BackgroundTaskSummary`, `SessionCronSummary` | same (`BaseHookInput.Effort`; `BackgroundTasks` / `SessionCrons` on `StopHookInput` and `SubagentStopHookInput`) |
+| `PreToolUseHookSpecificOutput`, `PostToolUseHookSpecificOutput`, `UserPromptSubmitHookSpecificOutput`, `UserPromptExpansionHookSpecificOutput`, `SessionStartHookSpecificOutput`, `PostToolBatchHookSpecificOutput`, `StopHookSpecificOutput`, `SubagentStopHookSpecificOutput`, `PermissionDeniedHookSpecificOutput`, `PreModelSwitchHookSpecificOutput`, `PostModelSwitchHookSpecificOutput`, `ElicitationHookSpecificOutput`, `ElicitationResultHookSpecificOutput`, `CwdChangedHookSpecificOutput`, `FileChangedHookSpecificOutput`, `WorktreeCreateHookSpecificOutput`, `MessageDisplayHookSpecificOutput` | same; marshal one into `HookOutput.HookSpecificOutput`. Their `Literal` fields (`permissionDecision`, `action`) are documented string values. |
 
 ## Rate limits & context usage
 
@@ -188,7 +188,7 @@ Two test tiers run against the real `claude` binary:
 | `test_conversation_reset.py` | `TestE2EClearEmitsConversationReset` |
 | `test_message_origin.py` | `TestE2EResultOriginRoundTrip` (the stamped frame is written directly; the Go API sends string prompts) |
 | `test_session_store_resume_settings.py` | `TestE2ESessionStoreResumeAppliesUserSettings` |
-| `test_verbatim_prompts.py` | `TestE2EAtPathExpandedByDefault`, `TestE2EVerbatimQueryNotExpanded`, `TestE2EVerbatimClientNotExpanded` |
+| `test_verbatim_prompts.py` | `TestE2EAtPathExpandedByDefault`, `TestE2EVerbatimQueryNotExpanded`, `TestE2EVerbatimClientNotExpanded` (keeps the pre-`a8e7ce3` control prompt: upstream's rewording made the control answer UNKNOWN more often against CLI 2.1.310) |
 | `test_run_end.py` | `TestE2EHookRunEndsWithOneResult`, `TestE2EFollowUpTurnAfterBackgroundSubagentIsServed` (`sdk` and `caller` variants) |
 | `test_tool_permissions.py` | `TestIntegrationCanUseToolOnlyStringPrompt`, `TestIntegrationCanUseToolDeny` (integration tier) |
 | (plugins) | `TestE2EPluginLoaded` |

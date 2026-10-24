@@ -323,13 +323,30 @@ func TestIntegrationHook(t *testing.T) {
 		}
 		return HookOutput{}, nil
 	}
+	// The PostToolUse and Stop inputs carry the fields upstream a8e7ce3 typed.
+	var postIn atomic.Pointer[PostToolUseHookInput]
+	postBash := func(ctx context.Context, input json.RawMessage, toolUseID string) (HookOutput, error) {
+		if in, err := DecodePostToolUse(input); err == nil && in.ToolName == "Bash" {
+			postIn.Store(&in)
+		}
+		return HookOutput{}, nil
+	}
+	var stopIn atomic.Pointer[StopHookInput]
+	stop := func(ctx context.Context, input json.RawMessage, toolUseID string) (HookOutput, error) {
+		if in, err := DecodeStop(input); err == nil {
+			stopIn.Store(&in)
+		}
+		return HookOutput{}, nil
+	}
 
 	for msg, err := range Query(ctx,
 		"Run `echo hi` with the Bash tool.",
 		WithAllowedTools("Bash"),
 		WithPermissionMode(PermissionBypass),
 		WithHooks(map[HookEvent][]HookMatcher{
-			HookPreToolUse: {{Matcher: "Bash", Callbacks: []HookCallback{preBash}}},
+			HookPreToolUse:  {{Matcher: "Bash", Callbacks: []HookCallback{preBash}}},
+			HookPostToolUse: {{Matcher: "Bash", Callbacks: []HookCallback{postBash}}},
+			HookStop:        {{Callbacks: []HookCallback{stop}}},
 		}),
 	) {
 		if err != nil {
@@ -339,6 +356,16 @@ func TestIntegrationHook(t *testing.T) {
 	}
 	if !hookFired.Load() {
 		t.Error("PreToolUse hook never fired for the Bash tool")
+	}
+	if in := postIn.Load(); in == nil {
+		t.Error("PostToolUse hook never fired for the Bash tool")
+	} else if in.DurationMs == nil || in.PromptID == "" {
+		t.Errorf("PostToolUse input missing duration_ms or prompt_id: %+v", *in)
+	}
+	if in := stopIn.Load(); in == nil {
+		t.Error("Stop hook never fired")
+	} else if in.LastAssistantMessage == "" {
+		t.Errorf("Stop input missing last_assistant_message: %+v", *in)
 	}
 }
 
