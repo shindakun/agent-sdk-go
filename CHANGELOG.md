@@ -8,7 +8,8 @@ All notable changes to this project are documented here. The format is based on
 ### Changed
 
 - `SupportedCLIVersion` is now `2.1.310` (upstream CLI bumps 2.1.292 through
-  2.1.310). Upstream SDK-source changes in the same window (`033b8ed`,
+  2.1.310). The unit suite and all ten integration tests pass against the
+  real 2.1.310 binary. Upstream SDK-source changes in the same window (`033b8ed`,
   `a8e7ce3`, `f33ec2b`, `aada024`, `beffc50`) are not part of this bump; each
   is tracked in its own upstream-triage issue.
 
