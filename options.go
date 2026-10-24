@@ -339,8 +339,10 @@ func WithStrictMcpConfig() Option {
 	return func(o *Options) { o.strictMcpConfig = true }
 }
 
-// WithIncludeHookEvents surfaces hook lifecycle events on the stream (maps to
-// --include-hook-events).
+// WithIncludeHookEvents surfaces hook lifecycle events (PreToolUse,
+// PostToolUse, Stop, …) on the stream as [HookEventMessage] values (maps to
+// --include-hook-events). The SessionStart and Setup hook events are emitted
+// regardless of this setting.
 func WithIncludeHookEvents() Option {
 	return func(o *Options) { o.includeHookEvents = true }
 }
