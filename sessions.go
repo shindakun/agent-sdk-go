@@ -802,16 +802,22 @@ func filterTranscriptEntries(entries []SessionStoreEntry) []transcriptEntry {
 }
 
 // buildConversationChain finds the main-chain leaf and walks parentUuid back
-// to the root, returning entries root first. logicalParentUuid (on compact
-// boundaries) is not followed: the compact summary replaces what came before.
+// to the root, returning entries root first. Tool calls and results the walk
+// skipped because the turn ran its tools in parallel are put back by
+// [recoverParallelToolResults]. logicalParentUuid (on compact boundaries) is
+// not followed: the compact summary replaces what came before.
 func buildConversationChain(entries []transcriptEntry) []transcriptEntry {
 	if len(entries) == 0 {
 		return nil
 	}
 	byUUID := make(map[string]transcriptEntry, len(entries))
 	index := make(map[string]int, len(entries))
+	var order []string // each uuid once, by first appearance
 	parents := map[string]bool{}
 	for i, e := range entries {
+		if _, dup := byUUID[e.str("uuid")]; !dup {
+			order = append(order, e.str("uuid"))
+		}
 		byUUID[e.str("uuid")] = e
 		index[e.str("uuid")] = i
 		if p := e.str("parentUuid"); p != "" {
@@ -864,7 +870,7 @@ func buildConversationChain(entries []transcriptEntry) []transcriptEntry {
 	if len(main) > 0 {
 		leaf = pick(main)
 	}
-	return walkToRoot(leaf, byUUID)
+	return recoverParallelToolResults(byUUID, order, walkToRoot(leaf, byUUID))
 }
 
 // walkToRoot follows parentUuid from leaf and returns the chain root first.
@@ -927,8 +933,11 @@ func entriesToSessionMessages(entries []transcriptEntry, limit, offset int) []Se
 
 // GetSessionMessages returns a session's conversation, oldest first: the
 // transcript's main chain rebuilt from parentUuid links, as user and assistant
-// messages. With a directory it looks in that project and its git worktrees;
-// with "" it searches every project. A missing session yields no messages.
+// messages. A turn that ran tools in parallel is returned whole: every tool_use
+// and every tool_result, not only the ones on the branch the conversation
+// continued from (limit and offset count them). With a directory it looks in
+// that project and its git worktrees; with "" it searches every project. A
+// missing session yields no messages.
 func GetSessionMessages(sessionID, directory string, limit, offset int) ([]SessionMessage, error) {
 	if !uuidRE.MatchString(sessionID) {
 		return nil, nil

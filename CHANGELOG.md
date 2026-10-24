@@ -31,6 +31,18 @@ All notable changes to this project are documented here. The format is based on
   ported: against CLI 2.1.310 it passed 5 of 8 runs, the current prompt 7 of 7
   (upstream reverts it in `f33ec2b`, below).
 
+### Fixed
+
+- **`GetSessionMessages` and `GetSessionMessagesFromStore` return every tool
+  call and result of a turn that ran tools in parallel.** The CLI writes each
+  result under its own call's entry, so a parallel turn forks the transcript
+  and the parentUuid walk kept only the branch the next turn continued from;
+  against CLI 2.1.310, three parallel calls came back with two of four results
+  missing. The off-branch calls and results are now put back after the
+  response's last entry on the chain, in timestamp order. `limit` and `offset`
+  count the recovered messages. `GetSubagentMessages` is unchanged, as
+  upstream. Ports upstream `beffc50`.
+
 ### Changed
 
 - **Breaking: `SandboxIgnoreViolations` is now `map[string][]string`**, and

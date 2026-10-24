@@ -20,9 +20,11 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -1589,5 +1591,219 @@ func TestE2EFollowUpTurnAfterBackgroundSubagentIsServed(t *testing.T) {
 				t.Errorf("target not written: %v", err)
 			}
 		})
+	}
+}
+
+// --- Parallel tool session reads (mirrors test_parallel_tool_session_reads.py)
+
+// blockPositions returns (message index, field) for every blockType content
+// block, in order.
+func blockPositions(t *testing.T, msgs []SessionMessage, blockType, field string) (idx []int, ids []string) {
+	t.Helper()
+	for i, m := range msgs {
+		var body struct {
+			Content json.RawMessage `json:"content"`
+		}
+		if err := json.Unmarshal(m.Message, &body); err != nil {
+			t.Fatal(err)
+		}
+		var blocks []map[string]any
+		if json.Unmarshal(body.Content, &blocks) != nil {
+			continue
+		}
+		for _, b := range blocks {
+			if b["type"] == blockType {
+				if id, ok := b[field].(string); ok {
+					idx, ids = append(idx, i), append(ids, id)
+				}
+			}
+		}
+	}
+	return idx, ids
+}
+
+// TestE2EParallelToolCallsAreReadBackWhole checks that after a turn that makes
+// several tool calls in one response, both GetSessionMessages (local
+// transcript) and GetSessionMessagesFromStore (mirrored entries) return every
+// tool call the live stream showed and every one of their results. The CLI
+// writes each result under its own call's entry, so when the calls are all
+// written before the first result the transcript forks and only one branch
+// leads to the next turn.
+func TestE2EParallelToolCallsAreReadBackWhole(t *testing.T) {
+	e2eSkip(t)
+	keys := []string{"alpha", "beta", "gamma"}
+	const toolName = "mcp__slow__lookup"
+	prompt := fmt.Sprintf("Look up %s with the %s tool, one call per key. Make all %d tool calls "+
+		"in a single response, so they run in parallel: do not wait for one result before making "+
+		"the next call. Then reply with the single word DONE.", strings.Join(keys, ", "), toolName, len(keys))
+
+	type lookupIn struct {
+		Key string `json:"key"`
+	}
+	srv := NewSdkMcpServer("slow").AddTool(
+		NewTool("lookup", "Look up the value stored for a key", func(ctx context.Context, in lookupIn) (ToolResult, error) {
+			// Slow, so every call of the response is written before any result.
+			select {
+			case <-time.After(time.Second):
+			case <-ctx.Done():
+				return ToolResult{}, ctx.Err()
+			}
+			return TextResult("value of " + in.Key), nil
+		}))
+
+	cwd := t.TempDir()
+	store := NewInMemorySessionStore()
+	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+	defer cancel()
+	client := NewClient(
+		WithCwd(cwd),
+		WithSessionStore(store, FlushBatched),
+		WithSDKMCPServer("slow", srv),
+		WithAllowedTools(toolName),
+		WithMaxTurns(4),
+	)
+	if err := client.Connect(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = client.Close() }()
+	if err := client.Query(ctx, prompt); err != nil {
+		t.Fatal(err)
+	}
+	var sessionID string
+	liveCalls, liveResults := map[string]bool{}, map[string]bool{}
+	for msg, err := range client.ReceiveResponse(ctx) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		switch m := msg.(type) {
+		case *ResultMessage:
+			if m.IsError {
+				t.Fatalf("run failed: %+v", m)
+			}
+			sessionID = m.SessionID
+		case *AssistantMessage:
+			if m.ParentToolUseID == "" {
+				for _, b := range m.Content {
+					if tu, ok := b.(*ToolUseBlock); ok {
+						liveCalls[tu.ID] = true
+					}
+				}
+			}
+		case *UserMessage:
+			if m.ParentToolUseID == "" {
+				for _, b := range m.Content {
+					if tr, ok := b.(*ToolResultBlock); ok {
+						liveResults[tr.ToolUseID] = true
+					}
+				}
+			}
+		}
+	}
+	_ = client.Close()
+	if sessionID == "" {
+		t.Fatal("run reported no session id")
+	}
+	if len(liveCalls) == 0 {
+		t.Fatal("the model should have called the lookup tool")
+	}
+	if !reflect.DeepEqual(liveCalls, liveResults) {
+		t.Fatalf("every live tool call should have a result: calls %v, results %v", liveCalls, liveResults)
+	}
+
+	// The readers are only under test if the transcript forked: some entry is
+	// the parent of two user/assistant entries. Whether it does is up to the
+	// model, which may make the calls one response at a time.
+	raw, err := store.Load(ctx, SessionKey{ProjectKey: ProjectKeyForDirectory(cwd), SessionID: sessionID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	children := map[string]int{}
+	forked := false
+	for _, se := range raw {
+		var e struct {
+			Type       string  `json:"type"`
+			UUID       *string `json:"uuid"`
+			ParentUUID string  `json:"parentUuid"`
+		}
+		if json.Unmarshal(se.Data, &e) != nil || e.UUID == nil || (e.Type != "user" && e.Type != "assistant") || e.ParentUUID == "" {
+			continue
+		}
+		children[e.ParentUUID]++
+		forked = forked || children[e.ParentUUID] > 1
+	}
+	if !forked {
+		t.Skip("the model did not make parallel tool calls")
+	}
+
+	local, err := GetSessionMessages(sessionID, cwd, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mirrored, err := GetSessionMessagesFromStore(ctx, store, sessionID, cwd, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := slices.Sorted(maps.Keys(liveCalls))
+	for _, r := range []struct {
+		name string
+		msgs []SessionMessage
+	}{{"local", local}, {"store", mirrored}} {
+		shape := make([]string, len(r.msgs))
+		uuids := map[string]bool{}
+		for i, m := range r.msgs {
+			shape[i] = m.Type + ":" + m.UUID
+			uuids[m.UUID] = true
+		}
+		callIdx, callIDs := blockPositions(t, r.msgs, "tool_use", "id")
+		resIdx, resIDs := blockPositions(t, r.msgs, "tool_result", "tool_use_id")
+
+		// Every call and every result, each exactly once.
+		if got := slices.Sorted(slices.Values(callIDs)); !slices.Equal(got, want) {
+			t.Errorf("%s: calls %v, want %v; shape %v", r.name, got, want, shape)
+		}
+		if got := slices.Sorted(slices.Values(resIDs)); !slices.Equal(got, want) {
+			t.Errorf("%s: results %v, want %v; shape %v", r.name, got, want, shape)
+		}
+		if len(uuids) != len(r.msgs) {
+			t.Errorf("%s: duplicate messages; shape %v", r.name, shape)
+		}
+
+		// Every result follows its call, with nothing but that call's own
+		// response in between, and the conversation still ends on the reply.
+		callAt := map[string]int{}
+		for i, id := range callIDs {
+			callAt[id] = callIdx[i]
+		}
+		responseAt := map[int]string{}
+		for i, m := range r.msgs {
+			if m.Type == "assistant" {
+				var body struct {
+					ID string `json:"id"`
+				}
+				_ = json.Unmarshal(m.Message, &body)
+				responseAt[i] = body.ID
+			}
+		}
+		for i, id := range resIDs {
+			start, at := callAt[id], resIdx[i]
+			if start >= at {
+				t.Errorf("%s: result for %s at %d precedes its call at %d; shape %v", r.name, id, at, start, shape)
+				continue
+			}
+			for j := start; j < at; j++ {
+				if rid, ok := responseAt[j]; ok && rid != responseAt[start] {
+					t.Errorf("%s: another response sits between call %s and its result; shape %v", r.name, id, shape)
+					break
+				}
+			}
+		}
+		if n := len(r.msgs); n == 0 || r.msgs[0].Type != "user" || r.msgs[n-1].Type != "assistant" {
+			t.Errorf("%s: should run from a user prompt to an assistant reply; shape %v", r.name, shape)
+		} else if _, last := blockPositions(t, r.msgs[n-1:], "tool_use", "id"); len(last) > 0 {
+			t.Errorf("%s: ends on a tool call; shape %v", r.name, shape)
+		}
+	}
+	if !slices.Equal(spUUIDs(local), spUUIDs(mirrored)) {
+		t.Errorf("local %v != store %v", spUUIDs(local), spUUIDs(mirrored))
 	}
 }
