@@ -384,7 +384,8 @@ type TaskUpdatedMessage struct {
 func (*TaskUpdatedMessage) isMessage() {}
 
 // HookEventMessage is a hook lifecycle event emitted on the stream when
-// [WithIncludeHookEvents] is set. It arrives as a system message with subtype
+// [WithIncludeHookEvents] is set; SessionStart and Setup hook events are
+// emitted without it. It arrives as a system message with subtype
 // "hook_started" (a hook begins) or "hook_response" (a hook completes).
 // HookEventName identifies the event (PreToolUse, PostToolUse, Stop, …); the
 // full payload is in Data.

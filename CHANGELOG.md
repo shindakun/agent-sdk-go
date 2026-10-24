@@ -45,6 +45,9 @@ All notable changes to this project are documented here. The format is based on
 - The verbatim-prompts e2e tests decide from the session transcript's file
   attachments, not the model's reply, which made the control test flaky.
   Ports upstream `f33ec2b`.
+- `WithIncludeHookEvents` and `HookEventMessage` docs note that the
+  SessionStart and Setup hook events are emitted regardless of the option
+  (verified for SessionStart against CLI 2.1.310). Ports upstream `aada024`.
 
 - `SupportedCLIVersion` is now `2.1.310` (upstream CLI bumps 2.1.292 through
   2.1.310). The unit suite and all ten integration tests pass against the
