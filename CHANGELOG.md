@@ -57,6 +57,13 @@ All notable changes to this project are documented here. The format is based on
 - The verbatim-prompts e2e tests decide from the session transcript's file
   attachments, not the model's reply, which made the control test flaky.
   Ports upstream `f33ec2b`.
+- The integration and e2e tests unset the session variables a parent Claude
+  Code session exports (`CLAUDE_CODE_REMOTE_SESSION_ID`,
+  `CLAUDE_CODE_SESSION_ID`, `CLAUDE_CODE_CHILD_SESSION`, `CLAUDECODE`) before
+  spawning the CLI. Run from inside such a session (a Claude Code cloud
+  session, say), the spawned CLI otherwise reused the parent's session id and
+  wrote to its transcript, and `TestE2ESubagentMessagesCarryParentToolUseID`
+  failed because the subagent transcripts were not where it looked.
 - `WithIncludeHookEvents` and `HookEventMessage` docs note that the
   SessionStart and Setup hook events are emitted regardless of the option
   (verified for SessionStart against CLI 2.1.310). Ports upstream `aada024`.
