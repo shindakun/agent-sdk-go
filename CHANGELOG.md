@@ -5,6 +5,17 @@ All notable changes to this project are documented here. The format is based on
 
 ## Unreleased
 
+### Added
+
+- **`SystemInitData`** types the system/init payload, with the same key names
+  as on the wire: model, cwd, tools, MCP servers, slash commands, permission
+  mode, plugins, plugin load errors, fast-mode state, and the `capabilities`
+  list for feature detection. `SystemMessage.InitData()` decodes it; init
+  frames still arrive as a plain `SystemMessage`. Adds `SystemInitMcpServer`,
+  `SystemInitPluginError`, `SystemInitPlugin` (an alias of `PluginInfo`),
+  and the `FastModeState` / `FastModeDisabledReason` constants.
+  `PluginInfo` gains `Version`. Ports upstream `033b8ed`.
+
 ### Changed
 
 - `SupportedCLIVersion` is now `2.1.310` (upstream CLI bumps 2.1.292 through

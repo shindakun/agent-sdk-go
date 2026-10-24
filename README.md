@@ -204,7 +204,9 @@ The streamed `Message` union: `AssistantMessage`, `UserMessage`, `SystemMessage`
 `ConversationResetMessage`, `HookEventMessage`, `MirrorErrorMessage`. Frame
 types the SDK does not know are skipped. `UserMessage.Origin` and
 `ResultMessage.Origin` tell your own turns from ones the session injected, such
-as background-task notifications. Content blocks:
+as background-task notifications. `SystemMessage.InitData()` decodes the
+system/init payload (model, cwd, tools, MCP servers, `capabilities`, …) as
+`SystemInitData`. Content blocks:
 `TextBlock`, `ThinkingBlock`, `ToolUseBlock`, `ToolResultBlock`,
 `ServerToolUseBlock`, `ServerToolResultBlock`.
 
