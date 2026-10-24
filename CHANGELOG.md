@@ -5,6 +5,14 @@ All notable changes to this project are documented here. The format is based on
 
 ## Unreleased
 
+### Coming: breaking change
+
+- `SandboxSettings.AllowUnsandboxedCommands` will change from `bool` to
+  `*bool` in a coming release. As a `bool` with `omitempty`, `false` is never
+  sent, so the field cannot turn off the CLI's default of `true`
+  ([#49](https://github.com/shindakun/agent-sdk-go/issues/49)). It is
+  unchanged in this release.
+
 ### Added
 
 - **`SystemInitData`** types the system/init payload, with the same key names
@@ -33,6 +41,10 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- **The SDK no longer passes an inherited `CLAUDECODE` to the CLI**, so an app
+  started from inside Claude Code does not make the CLI think it runs inside a
+  Claude Code parent. This matches upstream's transport. `WithEnv` can still
+  set it explicitly.
 - **`GetSessionMessages` and `GetSessionMessagesFromStore` return every tool
   call and result of a turn that ran tools in parallel.** The CLI writes each
   result under its own call's entry, so a parallel turn forks the transcript

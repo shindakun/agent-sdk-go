@@ -136,6 +136,35 @@ func asCLINotFound(err error, target **CLINotFoundError) bool {
 // The SDK asks the CLI for sdk_host_only session_state_changed frames unless
 // the caller's env or the process environment already names the variable, in
 // any case; it never sets CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS.
+// Like upstream's transport, the SDK drops an inherited CLAUDECODE so the CLI
+// does not think it runs inside a Claude Code parent; the caller's env can
+// still set it.
+func TestBuildEnvDropsInheritedClaudeCode(t *testing.T) {
+	count := func(env []string, key string) (n int, val string) {
+		for _, kv := range env {
+			if k, v, ok := strings.Cut(kv, "="); ok && k == key {
+				n, val = n+1, v
+			}
+		}
+		return n, val
+	}
+	t.Setenv(claudeCodeEnv, "1")
+	t.Setenv("CLAUDE_CODE_SESSION_ID", "parent")
+
+	env := (&subprocessTransport{}).buildEnv()
+	if n, _ := count(env, claudeCodeEnv); n != 0 {
+		t.Errorf("inherited %s passed to the CLI", claudeCodeEnv)
+	}
+	if n, v := count(env, "CLAUDE_CODE_SESSION_ID"); n != 1 || v != "parent" {
+		t.Errorf("other inherited variables must pass through unchanged; CLAUDE_CODE_SESSION_ID x%d = %q", n, v)
+	}
+
+	env = (&subprocessTransport{cfg: Config{Env: map[string]string{claudeCodeEnv: "explicit"}}}).buildEnv()
+	if n, v := count(env, claudeCodeEnv); n != 1 || v != "explicit" {
+		t.Errorf("caller-set %s = %q (x%d), want \"explicit\" once", claudeCodeEnv, v, n)
+	}
+}
+
 func TestBuildEnvSDKReadsSessionState(t *testing.T) {
 	lookup := func(env []string, key string) (string, bool) {
 		for _, kv := range env {

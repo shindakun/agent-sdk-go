@@ -138,12 +138,19 @@ func (t *subprocessTransport) buildEnv() []string {
 		if i := indexByte(kv, '='); i >= 0 {
 			key = kv[:i]
 		}
-		if !seen[key] {
+		// Drop the inherited CLAUDECODE so the CLI does not think it runs
+		// inside a Claude Code parent, as upstream's transport does; a caller
+		// can still set it through Config.Env.
+		if !seen[key] && key != claudeCodeEnv {
 			out = append(out, kv)
 		}
 	}
 	return out
 }
+
+// claudeCodeEnv is the variable Claude Code sets in its child processes to mark
+// them as running inside it.
+const claudeCodeEnv = "CLAUDECODE"
 
 // sdkReadsSessionStateEnv asks the CLI for session_state_changed frames marked
 // sdk_host_only. CLIs that predate it send none.
