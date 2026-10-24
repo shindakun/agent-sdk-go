@@ -28,9 +28,23 @@ All notable changes to this project are documented here. The format is based on
   (`BackgroundTaskSummary`) and `SessionCrons` (`SessionCronSummary`) on
   `StopHookInput` and `SubagentStopHookInput`. Ports upstream `a8e7ce3`'s
   types. Its reworded prompt for the verbatim-prompts e2e control test is not
-  ported: against CLI 2.1.310 it passed 5 of 8 runs, the current prompt 7 of 7.
+  ported: against CLI 2.1.310 it passed 5 of 8 runs, the current prompt 7 of 7
+  (upstream reverts it in `f33ec2b`, below).
 
 ### Changed
+
+- **Breaking: `SandboxIgnoreViolations` is now `map[string][]string`**, and
+  `SandboxSettings.IgnoreViolations` holds it by value. The CLI reads
+  `ignoreViolations` as a map from a command pattern (`"*"` for every command)
+  to substrings of the violation text, and rejects other shapes. The old
+  `{File, Network}` struct could not express `"*"`, and its `file` /
+  `network` keys were read as command patterns, so they applied only to
+  commands whose text contains "file" or "network". Replace
+  `&SandboxIgnoreViolations{File: paths}` with
+  `SandboxIgnoreViolations{"*": paths}`. Ports upstream `f33ec2b`.
+- The verbatim-prompts e2e tests decide from the session transcript's file
+  attachments, not the model's reply, which made the control test flaky.
+  Ports upstream `f33ec2b`.
 
 - `SupportedCLIVersion` is now `2.1.310` (upstream CLI bumps 2.1.292 through
   2.1.310). The unit suite and all ten integration tests pass against the

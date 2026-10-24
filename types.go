@@ -113,13 +113,13 @@ func IsTerminalTaskStatus(status string) bool {
 
 // SandboxSettings configures the CLI's command sandbox.
 type SandboxSettings struct {
-	Enabled                   bool                     `json:"enabled,omitempty"`
-	AutoAllowBashIfSandboxed  bool                     `json:"autoAllowBashIfSandboxed,omitempty"`
-	ExcludedCommands          []string                 `json:"excludedCommands,omitempty"`
-	AllowUnsandboxedCommands  bool                     `json:"allowUnsandboxedCommands,omitempty"`
-	Network                   *SandboxNetworkConfig    `json:"network,omitempty"`
-	IgnoreViolations          *SandboxIgnoreViolations `json:"ignoreViolations,omitempty"`
-	EnableWeakerNestedSandbox bool                     `json:"enableWeakerNestedSandbox,omitempty"`
+	Enabled                   bool                    `json:"enabled,omitempty"`
+	AutoAllowBashIfSandboxed  bool                    `json:"autoAllowBashIfSandboxed,omitempty"`
+	ExcludedCommands          []string                `json:"excludedCommands,omitempty"`
+	AllowUnsandboxedCommands  bool                    `json:"allowUnsandboxedCommands,omitempty"`
+	Network                   *SandboxNetworkConfig   `json:"network,omitempty"`
+	IgnoreViolations          SandboxIgnoreViolations `json:"ignoreViolations,omitempty"`
+	EnableWeakerNestedSandbox bool                    `json:"enableWeakerNestedSandbox,omitempty"`
 }
 
 // SandboxNetworkConfig configures sandbox network access.
@@ -135,11 +135,17 @@ type SandboxNetworkConfig struct {
 	SOCKSProxyPort          int      `json:"socksProxyPort,omitempty"`
 }
 
-// SandboxIgnoreViolations lists violations the sandbox should ignore.
-type SandboxIgnoreViolations struct {
-	File    []string `json:"file,omitempty"`
-	Network []string `json:"network,omitempty"`
-}
+// SandboxIgnoreViolations lists sandbox violations to leave unreported. It maps
+// a command pattern to a list of strings: a violation is left unreported when
+// the command's text contains the pattern and the violation's text contains one
+// of the strings. The pattern "*" matches every command. Both checks are plain
+// substring matches, not globs.
+//
+// For example, {"*": {"/etc/hosts"}} leaves violations that mention /etc/hosts
+// unreported for every command.
+//
+// This only affects which violations are reported, not what the sandbox blocks.
+type SandboxIgnoreViolations map[string][]string
 
 // --- Rate limits -------------------------------------------------------------
 
