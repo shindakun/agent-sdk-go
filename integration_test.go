@@ -52,6 +52,14 @@ func TestIntegrationQuery(t *testing.T) {
 				if m.SessionID == "" {
 					t.Error("init message has no session_id")
 				}
+				d, err := m.InitData()
+				if err != nil {
+					t.Errorf("InitData: %v", err)
+				} else if d.UUID == "" || d.SessionID != m.SessionID || d.ClaudeCodeVersion == "" ||
+					d.Cwd == "" || len(d.Tools) == 0 || d.Model == "" || d.PermissionMode == "" ||
+					d.APIKeySource == "" || d.OutputStyle == "" {
+					t.Errorf("init data missing required fields: %+v", d)
+				}
 			}
 		case *AssistantMessage:
 			sawAssist = true

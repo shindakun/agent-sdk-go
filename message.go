@@ -1,6 +1,9 @@
 package claude
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 // Message is a single item in the stream emitted by the CLI. The concrete types
 // are [AssistantMessage], [UserMessage], [SystemMessage], [ResultMessage],
@@ -69,11 +72,122 @@ type PluginInfo struct {
 	Name   string `json:"name"`
 	Path   string `json:"path"`
 	Source string `json:"source,omitempty"`
+	// Version is the version declared in the plugin's manifest, verbatim.
+	// Omitted when the manifest declares none.
+	Version string `json:"version,omitempty"`
+}
+
+// SystemInitPlugin is a loaded plugin listed in [SystemInitData].
+type SystemInitPlugin = PluginInfo
+
+// SystemInitMcpServer is an MCP server listed in [SystemInitData].
+type SystemInitMcpServer struct {
+	Name   string `json:"name"`
+	Status string `json:"status"`
+	// Source is where the server definition came from: "sdk", "plugin", or a
+	// config scope such as "user" or "project". Empty on CLIs that predate the
+	// field.
+	Source string `json:"source,omitempty"`
+}
+
+// SystemInitPluginError is a plugin load failure listed in [SystemInitData].
+type SystemInitPluginError struct {
+	// Plugin is "name@marketplace", or a positional tag such as "inline[0]" or
+	// "synced[0]" when a directory entry failed before it had a name.
+	Plugin string `json:"plugin"`
+	// Type is the failure category from an open set (for example
+	// "path-not-found", "manifest-validation-error"). Treat unknown values as
+	// a generic failure.
+	Type    string `json:"type"`
+	Message string `json:"message"`
+	// Path is set only when a plugins, --plugin-dir or synced directory entry
+	// did not load at all: that entry's path, resolved against the cwd. Use it
+	// to match a positional Plugin tag to your entry.
+	Path string `json:"path,omitempty"`
+}
+
+// FastModeState is the fast mode state reported in [SystemInitData].
+type FastModeState string
+
+const (
+	FastModeOff      FastModeState = "off"
+	FastModeCooldown FastModeState = "cooldown"
+	FastModeOn       FastModeState = "on"
+)
+
+// FastModeDisabledReason names why fast mode can't serve right now, as
+// reported in [SystemInitData]. Newer CLIs may send values not listed here.
+type FastModeDisabledReason string
+
+const (
+	FastModeDisabledFree               FastModeDisabledReason = "free"
+	FastModeDisabledPreference         FastModeDisabledReason = "preference"
+	FastModeDisabledExtraUsageDisabled FastModeDisabledReason = "extra_usage_disabled"
+	FastModeDisabledNetworkError       FastModeDisabledReason = "network_error"
+	FastModeDisabledUnknown            FastModeDisabledReason = "unknown"
+	FastModeDisabledNotFirstParty      FastModeDisabledReason = "not_first_party"
+	FastModeDisabledByEnv              FastModeDisabledReason = "disabled_by_env"
+	FastModeDisabledModelNotAllowed    FastModeDisabledReason = "model_not_allowed"
+	FastModeDisabledSdkOptInRequired   FastModeDisabledReason = "sdk_opt_in_required"
+	FastModeDisabledPending            FastModeDisabledReason = "pending"
+)
+
+// SystemInitData is the payload of a system/init message: the session metadata
+// the CLI emits at the start of each turn (model, working directory, tools, MCP
+// servers, slash commands, permission mode, and the capabilities list for
+// feature detection). JSON keys match the wire. Decode it with
+// [SystemMessage.InitData].
+//
+// The parser does not validate the payload, so this describes what the CLI
+// sends rather than a guarantee. Fields marked optional are empty when the CLI
+// omits them.
+type SystemInitData struct {
+	Type      string `json:"type"`
+	Subtype   string `json:"subtype"`
+	UUID      string `json:"uuid"`
+	SessionID string `json:"session_id"`
+	// Agents is optional.
+	Agents []string `json:"agents,omitempty"`
+	// APIKeySource is where the API credential came from: "ANTHROPIC_API_KEY",
+	// "apiKeyHelper", "/login managed key", or "none" (no API key in use, for
+	// example a claude.ai login or a third-party cloud provider).
+	APIKeySource string `json:"apiKeySource"`
+	// Betas is optional.
+	Betas             []string              `json:"betas,omitempty"`
+	ClaudeCodeVersion string                `json:"claude_code_version"`
+	Cwd               string                `json:"cwd"`
+	Tools             []string              `json:"tools"`
+	McpServers        []SystemInitMcpServer `json:"mcp_servers"`
+	Model             string                `json:"model"`
+	PermissionMode    PermissionMode        `json:"permissionMode"`
+	SlashCommands     []string              `json:"slash_commands"`
+	// TerminalSlashCommands lists the SlashCommands entries whose interface is
+	// bound to the local terminal (for example "exit"). Present only when
+	// non-empty.
+	TerminalSlashCommands []string           `json:"terminal_slash_commands,omitempty"`
+	OutputStyle           string             `json:"output_style"`
+	Skills                []string           `json:"skills"`
+	Plugins               []SystemInitPlugin `json:"plugins"`
+	// PluginErrors lists plugin load failures. The CLI omits the key when
+	// nothing failed, but an empty list does not by itself assert a clean load
+	// (older CLIs and some hosted sessions never send it).
+	PluginErrors []SystemInitPluginError `json:"plugin_errors,omitempty"`
+	// FastModeState is optional.
+	FastModeState FastModeState `json:"fast_mode_state,omitempty"`
+	// FastModeDisabledReason names the check that blocks fast mode, when
+	// something does. Optional.
+	FastModeDisabledReason FastModeDisabledReason `json:"fast_mode_disabled_reason,omitempty"`
+	// Capabilities lists protocol capabilities this CLI supports (for example
+	// "interrupt_receipt_v1"), for feature detection instead of comparing
+	// ClaudeCodeVersion. Open set: ignore values you don't recognize. Absent on
+	// CLIs before 2.1.205.
+	Capabilities []string `json:"capabilities,omitempty"`
 }
 
 // SystemMessage carries out-of-band events from the CLI. Subtype distinguishes
 // the payload (for example "init" or "session_state_changed"); subtype-specific
-// fields are populated where known, and Data holds the full payload.
+// fields are populated where known, and Data holds the full payload. For the
+// "init" subtype, [SystemMessage.InitData] decodes Data as [SystemInitData].
 type SystemMessage struct {
 	Subtype   string
 	SessionID string
@@ -87,6 +201,20 @@ type SystemMessage struct {
 }
 
 func (*SystemMessage) isMessage() {}
+
+// InitData decodes Data as the [SystemInitData] payload of a system/init
+// message. It returns an error if Subtype is not "init" or Data does not
+// decode.
+func (m *SystemMessage) InitData() (*SystemInitData, error) {
+	if m.Subtype != "init" {
+		return nil, fmt.Errorf("claude: InitData on system message with subtype %q, want \"init\"", m.Subtype)
+	}
+	var d SystemInitData
+	if err := json.Unmarshal(m.Data, &d); err != nil {
+		return nil, fmt.Errorf("claude: decode system/init data: %w", err)
+	}
+	return &d, nil
+}
 
 // ModelUsage reports per-model token usage and cost, keyed in
 // [ResultMessage.ModelUsage] by the raw model string the CLI billed.

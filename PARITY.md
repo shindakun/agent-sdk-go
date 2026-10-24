@@ -5,8 +5,10 @@ This maps the Go port name-for-name against the reference
 Parity is **mechanically verified** against a clone of the source at three
 levels — names, fields, and enum values — using AST extraction, not eyeballing:
 
-- Public names (`__all__`): **133/133** accounted for: 127 with a Go
-  equivalent, 6 documented N/A below.
+- Public names (`__all__`): **139/159** accounted for: 133 with a Go
+  equivalent, 6 documented N/A below. The other 20, upstream's hook-specific
+  output types (`a8e7ce3`), are not ported yet
+  ([#38](https://github.com/shindakun/agent-sdk-go/issues/38)).
 - `ClaudeAgentOptions` fields: **49/49** covered (`debug_stderr` N/A below).
   `output_format`'s JSON schema is `WithJSONSchema`; `thinking` is
   `WithThinkingConfig`.
@@ -14,13 +16,14 @@ levels — names, fields, and enum values — using AST extraction, not eyeballi
   the Go struct (incl. nested-vs-top-level decode sources). Control-protocol
   TypedDicts (`SDKControl*`) map to internal request types; system-prompt and
   tools-preset dicts map to options.
-- **Literal value sets**: all 18 `Literal` aliases in `types.py` have their
+- **Literal value sets**: all 20 `Literal` aliases in `types.py` have their
   values as Go constants: `PermissionMode` (6), `HookEvent` (10),
   `EffortLevel`, `SettingSource`, `SdkBeta`, `PermissionUpdateDestination`,
   `PermissionBehavior`, `McpServerConnectionStatus`, `ServerToolName`,
   `AssistantMessageError`, `MessageOriginKind`, `TaskNotificationOriginSubkind`,
   `TaskNotificationStatus`, `TaskUpdatedStatus`, `RateLimitStatus`,
-  `RateLimitType`, `SessionStoreFlushMode`, `ThinkingDisplay`.
+  `RateLimitType`, `SessionStoreFlushMode`, `ThinkingDisplay`,
+  `FastModeState`, `FastModeDisabledReason`.
 - **Inbound control-request fields**: `can_use_tool` delivers the full
   `ToolPermissionContext` (agent_id, blocked_path, decision_reason, title,
   display_name, description), `hook_callback`, `mcp_message`.
@@ -78,6 +81,7 @@ Notable wire details verified against the source:
 | Python | Go |
 | --- | --- |
 | `Message`, `UserMessage`, `AssistantMessage`, `SystemMessage`, `ResultMessage`, `StreamEvent` | same |
+| `SystemInitData`, `SystemInitMcpServer`, `SystemInitPlugin`, `SystemInitPluginError`, `FastModeState`, `FastModeDisabledReason` | same; `SystemInitPlugin` is an alias of `PluginInfo`. Upstream casts `SystemMessage.data`; Go decodes it with `SystemMessage.InitData()`. The parser still returns a plain `SystemMessage` for init frames. |
 | `TaskNotificationMessage`, `TaskStartedMessage`, `TaskProgressMessage`, `TaskUpdatedMessage`, `TaskUsage`, `TaskNotificationStatus`, `TaskUpdatedStatus`, `TERMINAL_TASK_STATUSES` | `TaskNotificationMessage`, `TaskStartedMessage`, `TaskProgressMessage`, `TaskUpdatedMessage`, `TaskUsage`, status consts, `TerminalTaskStatuses`/`IsTerminalTaskStatus` |
 | `TextBlock`, `ThinkingBlock`, `ToolUseBlock`, `ToolResultBlock`, `ContentBlock` | same |
 | `ServerToolUseBlock`, `ServerToolResultBlock`, `ServerToolName` | same |

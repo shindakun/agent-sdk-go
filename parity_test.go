@@ -3,6 +3,7 @@ package claude
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"testing"
 )
 
@@ -212,6 +213,75 @@ func TestSystemInitPluginsDecode(t *testing.T) {
 	p := sm.Plugins[0]
 	if p.Name != "demo-plugin" || p.Path != "/p/demo-plugin" || p.Source != "demo-plugin@inline" {
 		t.Errorf("plugin = %+v", p)
+	}
+}
+
+// The frame mirrors a live system/init from CLI 2.1.310, trimmed, plus the
+// optional keys that frame did not carry (betas, plugin_errors, a plugin
+// version, an MCP server).
+func TestSystemInitDataDecode(t *testing.T) {
+	line := []byte(`{"type":"system","subtype":"init","cwd":"/w","session_id":"s1",` +
+		`"tools":["Bash","Read"],"mcp_servers":[{"name":"calc","status":"connected","source":"sdk"}],` +
+		`"model":"claude-sonnet-5-5","permissionMode":"default","slash_commands":["review","exit"],` +
+		`"terminal_slash_commands":["exit"],"apiKeySource":"none","claude_code_version":"2.1.310",` +
+		`"output_style":"default","agents":["general-purpose"],"skills":["review"],` +
+		`"plugins":[{"name":"p","path":"/p","source":"p@inline","version":"1.2.0"}],` +
+		`"plugin_errors":[{"plugin":"inline[0]","type":"path-not-found","message":"missing","path":"/w/gone"}],` +
+		`"betas":["b1"],"capabilities":["interrupt_receipt_v1"],"uuid":"u1",` +
+		`"fast_mode_state":"off","fast_mode_disabled_reason":"sdk_opt_in_required","view_mode":"default"}`)
+	msg, err := UnmarshalMessage(line)
+	if err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	sm, ok := msg.(*SystemMessage)
+	if !ok {
+		t.Fatalf("got %T, want *SystemMessage", msg)
+	}
+	d, err := sm.InitData()
+	if err != nil {
+		t.Fatalf("InitData: %v", err)
+	}
+	want := SystemInitData{
+		Type: "system", Subtype: "init", UUID: "u1", SessionID: "s1",
+		Agents: []string{"general-purpose"}, APIKeySource: "none", Betas: []string{"b1"},
+		ClaudeCodeVersion: "2.1.310", Cwd: "/w", Tools: []string{"Bash", "Read"},
+		McpServers:     []SystemInitMcpServer{{Name: "calc", Status: "connected", Source: "sdk"}},
+		Model:          "claude-sonnet-5-5",
+		PermissionMode: PermissionDefault, SlashCommands: []string{"review", "exit"},
+		TerminalSlashCommands: []string{"exit"}, OutputStyle: "default", Skills: []string{"review"},
+		Plugins:       []SystemInitPlugin{{Name: "p", Path: "/p", Source: "p@inline", Version: "1.2.0"}},
+		PluginErrors:  []SystemInitPluginError{{Plugin: "inline[0]", Type: "path-not-found", Message: "missing", Path: "/w/gone"}},
+		FastModeState: FastModeOff, FastModeDisabledReason: FastModeDisabledSdkOptInRequired,
+		Capabilities: []string{"interrupt_receipt_v1"},
+	}
+	if !reflect.DeepEqual(*d, want) {
+		t.Errorf("InitData =\n%+v\nwant\n%+v", *d, want)
+	}
+	if !reflect.DeepEqual(sm.Plugins, want.Plugins) {
+		t.Errorf("SystemMessage.Plugins = %+v, want %+v", sm.Plugins, want.Plugins)
+	}
+}
+
+func TestSystemInitDataOpenSets(t *testing.T) {
+	// Values newer CLIs may add pass through rather than failing the decode.
+	sm := &SystemMessage{Subtype: "init", Data: []byte(`{"subtype":"init","fast_mode_disabled_reason":"brand_new","permissionMode":"future"}`)}
+	d, err := sm.InitData()
+	if err != nil {
+		t.Fatalf("InitData: %v", err)
+	}
+	if d.FastModeDisabledReason != "brand_new" || d.PermissionMode != "future" {
+		t.Errorf("open-set values lost: %+v", d)
+	}
+}
+
+func TestSystemInitDataWrongSubtype(t *testing.T) {
+	sm := &SystemMessage{Subtype: "session_state_changed", Data: []byte(`{}`)}
+	if _, err := sm.InitData(); err == nil {
+		t.Error("InitData on a non-init message returned no error")
+	}
+	sm = &SystemMessage{Subtype: "init", Data: []byte(`{"tools":"not-a-list"}`)}
+	if _, err := sm.InitData(); err == nil {
+		t.Error("InitData on a malformed payload returned no error")
 	}
 }
 
