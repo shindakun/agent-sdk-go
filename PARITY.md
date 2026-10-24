@@ -189,6 +189,7 @@ Two test tiers run against the real `claude` binary:
 | `test_message_origin.py` | `TestE2EResultOriginRoundTrip` (the stamped frame is written directly; the Go API sends string prompts) |
 | `test_session_store_resume_settings.py` | `TestE2ESessionStoreResumeAppliesUserSettings` |
 | `test_verbatim_prompts.py` | `TestE2EAtPathExpandedByDefault`, `TestE2EVerbatimQueryNotExpanded`, `TestE2EVerbatimClientNotExpanded` (decided from the transcript's file attachments, as upstream since `f33ec2b`) |
+| `test_parallel_tool_session_reads.py` | `TestE2EParallelToolCallsAreReadBackWhole` |
 | `test_run_end.py` | `TestE2EHookRunEndsWithOneResult`, `TestE2EFollowUpTurnAfterBackgroundSubagentIsServed` (`sdk` and `caller` variants) |
 | `test_tool_permissions.py` | `TestIntegrationCanUseToolOnlyStringPrompt`, `TestIntegrationCanUseToolDeny` (integration tier) |
 | (plugins) | `TestE2EPluginLoaded` |
