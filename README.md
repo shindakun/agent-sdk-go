@@ -17,9 +17,9 @@ and context management; this SDK owns process lifecycle, framing,
 control-protocol correlation, and dispatch of in-process callbacks (permissions,
 hooks, and SDK MCP tools).
 
-Verified against **Claude Code CLI 2.1.291** (the version the upstream SDK
+Verified against **Claude Code CLI 2.1.310** (the version the upstream SDK
 bundles, pinned as `claude.SupportedCLIVersion`), statically (133/133 public
-names, 49/49 options) and behaviorally (integration and e2e suites that run
+names, 49/49 options as of the 2.1.291 audit) and behaviorally (integration and e2e suites that run
 against the real binary). `claude.CheckCLIVersion` reports the installed binary's
 version and whether it matches the pin.
 
