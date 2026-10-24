@@ -45,6 +45,8 @@ Notable wire details verified against the source:
   `--max-thinking-tokens N` (enabled — no bare `--thinking`), `--thinking
   disabled`, plus `--thinking-display`.
 - Unknown top-level frame types are skipped, as upstream's parser does.
+- An inherited `CLAUDECODE` is dropped from the CLI's environment, as
+  upstream's transport does (`WithEnv` can still set it).
 - `rate_limit_event` uses camelCase keys (`resetsAt`, `rateLimitType`…) though
   the public type is snake_case.
 - The session first-prompt summary skips synthetic lines

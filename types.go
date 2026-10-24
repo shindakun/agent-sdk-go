@@ -113,9 +113,14 @@ func IsTerminalTaskStatus(status string) bool {
 
 // SandboxSettings configures the CLI's command sandbox.
 type SandboxSettings struct {
-	Enabled                   bool                    `json:"enabled,omitempty"`
-	AutoAllowBashIfSandboxed  bool                    `json:"autoAllowBashIfSandboxed,omitempty"`
-	ExcludedCommands          []string                `json:"excludedCommands,omitempty"`
+	Enabled                  bool     `json:"enabled,omitempty"`
+	AutoAllowBashIfSandboxed bool     `json:"autoAllowBashIfSandboxed,omitempty"`
+	ExcludedCommands         []string `json:"excludedCommands,omitempty"`
+	// AllowUnsandboxedCommands lets commands bypass the sandbox via
+	// dangerouslyDisableSandbox. The CLI defaults it to true. Because false is
+	// omitted, this field cannot currently turn it off; a coming release
+	// changes it to *bool so false can be sent (a breaking change, see
+	// https://github.com/shindakun/agent-sdk-go/issues/49).
 	AllowUnsandboxedCommands  bool                    `json:"allowUnsandboxedCommands,omitempty"`
 	Network                   *SandboxNetworkConfig   `json:"network,omitempty"`
 	IgnoreViolations          SandboxIgnoreViolations `json:"ignoreViolations,omitempty"`
