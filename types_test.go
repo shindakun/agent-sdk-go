@@ -79,6 +79,53 @@ func TestSandboxIgnoreViolationsPassedThrough(t *testing.T) {
 	}
 }
 
+// AllowUnsandboxedCommands and AutoAllowBashIfSandboxed default to true in the
+// CLI, so an explicit false must reach --settings (#49); nil leaves them out.
+func TestSandboxBoolDefaultsSerialize(t *testing.T) {
+	settingsSandbox := func(t *testing.T, s SandboxSettings) map[string]json.RawMessage {
+		t.Helper()
+		args, err := newOptions(WithSandbox(s)).buildArgs()
+		if err != nil {
+			t.Fatalf("buildArgs: %v", err)
+		}
+		for i := 0; i+1 < len(args); i++ {
+			if args[i] == "--settings" {
+				var parsed struct {
+					Sandbox map[string]json.RawMessage `json:"sandbox"`
+				}
+				if err := json.Unmarshal([]byte(args[i+1]), &parsed); err != nil {
+					t.Fatalf("settings json: %v (%s)", err, args[i+1])
+				}
+				return parsed.Sandbox
+			}
+		}
+		t.Fatal("no --settings flag emitted for sandbox")
+		return nil
+	}
+	for _, tc := range []struct {
+		name string
+		v    *bool
+		want string // "" = key absent
+	}{
+		{"unset", nil, ""},
+		{"false", Bool(false), "false"},
+		{"true", Bool(true), "true"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := settingsSandbox(t, SandboxSettings{Enabled: true, AllowUnsandboxedCommands: tc.v, AutoAllowBashIfSandboxed: tc.v})
+			for _, key := range []string{"allowUnsandboxedCommands", "autoAllowBashIfSandboxed"} {
+				raw, ok := got[key]
+				switch {
+				case tc.want == "" && ok:
+					t.Errorf("%s sent as %s, want it omitted", key, raw)
+				case tc.want != "" && string(raw) != tc.want:
+					t.Errorf("%s = %q, want %s", key, raw, tc.want)
+				}
+			}
+		})
+	}
+}
+
 func TestContextUsageTyped(t *testing.T) {
 	cu := ContextUsage{Raw: json.RawMessage(`{"totalTokens":100,"maxTokens":200,"percentage":50,"model":"m","categories":[{"name":"sys","tokens":40,"color":"red"}]}`)}
 	r, err := cu.Typed()

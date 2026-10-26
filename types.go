@@ -113,15 +113,16 @@ func IsTerminalTaskStatus(status string) bool {
 
 // SandboxSettings configures the CLI's command sandbox.
 type SandboxSettings struct {
-	Enabled                  bool     `json:"enabled,omitempty"`
-	AutoAllowBashIfSandboxed bool     `json:"autoAllowBashIfSandboxed,omitempty"`
+	Enabled bool `json:"enabled,omitempty"`
+	// AutoAllowBashIfSandboxed auto-approves bash commands when sandboxed. Nil
+	// leaves the CLI default (true); use [Bool](false) to require approval.
+	AutoAllowBashIfSandboxed *bool    `json:"autoAllowBashIfSandboxed,omitempty"`
 	ExcludedCommands         []string `json:"excludedCommands,omitempty"`
 	// AllowUnsandboxedCommands lets commands bypass the sandbox via
-	// dangerouslyDisableSandbox. The CLI defaults it to true. Because false is
-	// omitted, this field cannot currently turn it off; a coming release
-	// changes it to *bool so false can be sent (a breaking change, see
-	// https://github.com/shindakun/agent-sdk-go/issues/49).
-	AllowUnsandboxedCommands  bool                    `json:"allowUnsandboxedCommands,omitempty"`
+	// dangerouslyDisableSandbox. Nil leaves the CLI default (true); use
+	// [Bool](false) so all commands must run sandboxed (or be in
+	// ExcludedCommands).
+	AllowUnsandboxedCommands  *bool                   `json:"allowUnsandboxedCommands,omitempty"`
 	Network                   *SandboxNetworkConfig   `json:"network,omitempty"`
 	IgnoreViolations          SandboxIgnoreViolations `json:"ignoreViolations,omitempty"`
 	EnableWeakerNestedSandbox bool                    `json:"enableWeakerNestedSandbox,omitempty"`
@@ -275,7 +276,7 @@ type ToolAnnotations struct {
 }
 
 // Bool returns a pointer to v, for optional fields such as the
-// [ToolAnnotations] hints.
+// [ToolAnnotations] hints and the [SandboxSettings] defaults.
 func Bool(v bool) *bool { return &v }
 
 // McpToolInfo describes one tool offered by an MCP server.
