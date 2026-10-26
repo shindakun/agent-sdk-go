@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format is based on
 
 ## Unreleased
 
+## [v0.6.0] - 2026-10-26
+
 ### Changed
 
 - **Breaking: `SandboxSettings.AllowUnsandboxedCommands` and
