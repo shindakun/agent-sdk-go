@@ -101,7 +101,7 @@ Notable wire details verified against the source:
 | `ToolAnnotations` (MCP hints + `maxResultSizeChars`) | `ToolAnnotations` (`maxResultSizeChars` sent in `_meta`) |
 | `AgentDefinition` | `AgentDefinition` (full field set) |
 | `SdkPluginConfig` | `SdkPluginConfig`, `WithPlugins` |
-| `SandboxSettings`, `SandboxNetworkConfig`, `SandboxIgnoreViolations` | same (`WithSandbox`); `SandboxIgnoreViolations` is `map[string][]string`, command pattern to violation substrings |
+| `SandboxSettings`, `SandboxNetworkConfig`, `SandboxIgnoreViolations` | same (`WithSandbox`); `SandboxIgnoreViolations` is `map[string][]string`, command pattern to violation substrings; `AllowUnsandboxedCommands` and `AutoAllowBashIfSandboxed` are `*bool` because the CLI defaults them to `true` (use `Bool(false)`) |
 
 ## Permissions & hooks
 

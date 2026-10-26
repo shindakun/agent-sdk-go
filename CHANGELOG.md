@@ -5,6 +5,24 @@ All notable changes to this project are documented here. The format is based on
 
 ## Unreleased
 
+### Changed
+
+- **Breaking: `SandboxSettings.AllowUnsandboxedCommands` and
+  `AutoAllowBashIfSandboxed` are now `*bool`**
+  ([#49](https://github.com/shindakun/agent-sdk-go/issues/49), announced in
+  v0.5.0). The CLI defaults both to `true`, and as plain `bool`s with
+  `omitempty` a `false` was never sent, so neither could be turned off. Nil
+  now leaves the CLI default, and `claude.Bool(false)` is sent explicitly.
+  Against CLI 2.1.310 with the sandbox running, `AllowUnsandboxedCommands:
+  claude.Bool(false)` keeps a `dangerouslyDisableSandbox` command sandboxed,
+  where the default lets it write outside the working directory
+  (`TestE2ESandboxAllowUnsandboxedCommandsFalse`). To migrate, replace
+  `AllowUnsandboxedCommands: true` with `AllowUnsandboxedCommands:
+  claude.Bool(true)`, and the same for `AutoAllowBashIfSandboxed`, or drop
+  the field to keep the default. The other sandbox `bool`s default to `false`
+  in the CLI, so omitting `false` is correct for them and they are
+  unchanged.
+
 ## [v0.5.0] - 2026-10-24
 
 ### Coming: breaking change

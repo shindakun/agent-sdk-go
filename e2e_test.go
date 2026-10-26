@@ -25,6 +25,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -1806,5 +1807,59 @@ func TestE2EParallelToolCallsAreReadBackWhole(t *testing.T) {
 	}
 	if !slices.Equal(spUUIDs(local), spUUIDs(mirrored)) {
 		t.Errorf("local %v != store %v", spUUIDs(local), spUUIDs(mirrored))
+	}
+}
+
+// --- Sandbox strict mode (#49) ----------------------------------------------
+
+// TestE2ESandboxAllowUnsandboxedCommandsFalse checks that an explicit
+// AllowUnsandboxedCommands=false reaches the CLI and holds: a Bash call that
+// asks for dangerouslyDisableSandbox still runs sandboxed, so it cannot write
+// outside the working directory. With the field unset (the CLI default, true)
+// the same call escapes the sandbox, which shows the probe can tell the two
+// apart.
+func TestE2ESandboxAllowUnsandboxedCommandsFalse(t *testing.T) {
+	e2eSkip(t)
+	switch runtime.GOOS {
+	case "windows":
+		t.Skip("the CLI sandbox does not run on Windows")
+	case "linux":
+		for _, bin := range []string{"bwrap", "socat"} {
+			if _, err := exec.LookPath(bin); err != nil {
+				t.Skipf("sandbox dependency %s not installed", bin)
+			}
+		}
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip(err)
+	}
+	escaped := func(t *testing.T, allow *bool) bool {
+		t.Helper()
+		target := filepath.Join(home, fmt.Sprintf("agent-sdk-go-sandbox-probe-%d", time.Now().UnixNano()))
+		t.Cleanup(func() { _ = os.Remove(target) })
+		ctx, cancel := e2eCtx(t)
+		defer cancel()
+		for _, err := range Query(ctx,
+			"Run exactly this with the Bash tool, setting dangerouslyDisableSandbox to true: touch "+target+
+				" . If it fails, do not retry another way; just reply DONE.",
+			isolatedOpts(t.TempDir(),
+				WithAllowedTools("Bash"),
+				WithPermissionMode(PermissionBypass),
+				WithMaxTurns(3),
+				WithSandbox(SandboxSettings{Enabled: true, AllowUnsandboxedCommands: allow}),
+			)...) {
+			if err != nil {
+				t.Fatalf("query: %v", err)
+			}
+		}
+		_, statErr := os.Stat(target)
+		return statErr == nil
+	}
+	if !escaped(t, nil) {
+		t.Skip("control: the unsandboxed call did not run with the default setting, so the strict run proves nothing")
+	}
+	if escaped(t, Bool(false)) {
+		t.Error("AllowUnsandboxedCommands=false: a dangerouslyDisableSandbox command wrote outside the sandbox")
 	}
 }
