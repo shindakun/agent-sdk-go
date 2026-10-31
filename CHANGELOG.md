@@ -7,10 +7,12 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
-- `SupportedCLIVersion` is now `2.1.311` (upstream CLI bump `717cea0`,
-  [#55](https://github.com/shindakun/agent-sdk-go/issues/55)). Upstream made no
+- `SupportedCLIVersion` is now `2.1.316` (upstream CLI bumps `717cea0`
+  2.1.311, [#55](https://github.com/shindakun/agent-sdk-go/issues/55), and
+  `2d48520` 2.1.312, `7d7ec0f` 2.1.314, `555c54d` 2.1.316,
+  [#57](https://github.com/shindakun/agent-sdk-go/issues/57)). Upstream made no
   SDK-source changes since 2.1.310. The unit suite and all ten integration tests
-  pass against the real 2.1.311 binary.
+  pass against the real 2.1.316 binary.
 
 ## [v0.6.0] - 2026-10-26
 
