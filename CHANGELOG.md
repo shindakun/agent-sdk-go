@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format is based on
 
 ## Unreleased
 
+## [v0.6.1] - 2026-11-02
+
 ### Changed
 
 - `SupportedCLIVersion` is now `2.1.316` (upstream CLI bumps `717cea0`
