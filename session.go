@@ -163,6 +163,10 @@ func (s *session) connect(ctx context.Context) (err error) {
 		}
 		return &ConnectionError{Err: err}
 	}
+	if err := s.registry.checkHookOnFailure(initResult); err != nil {
+		_ = s.t.Close()
+		return &ConnectionError{Err: err}
+	}
 	s.initResult = initResult
 	return nil
 }

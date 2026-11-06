@@ -34,7 +34,27 @@ type HookMatcher struct {
 	Matcher   string
 	Callbacks []HookCallback
 	Timeout   time.Duration
+	// OnFailure is what happens when a callback in this matcher fails. With
+	// [HookOnFailureBlock], a callback that returns an error, or a value the
+	// CLI rejects (such as permissionDecision "Deny"), blocks the action, so a
+	// callback with no opinion must return a zero HookOutput. Unrecognized keys
+	// are not a failure. Stop, SubagentStop, TaskCompleted and TeammateIdle
+	// ignore this option, and a PermissionRequest block counts only if it lands
+	// before CanUseTool answers. Empty or [HookOnFailureContinue] counts a
+	// failure as no decision. With anything but those two, connecting to a CLI
+	// too old to honor it fails with a [ConnectionError].
+	OnFailure HookOnFailure
 }
+
+// HookOnFailure is a [HookMatcher.OnFailure] mode.
+type HookOnFailure string
+
+const (
+	// HookOnFailureContinue counts a failing callback as no decision.
+	HookOnFailureContinue HookOnFailure = "continue"
+	// HookOnFailureBlock blocks the action when a callback fails.
+	HookOnFailureBlock HookOnFailure = "block"
+)
 
 // HookOutput is returned by a [HookCallback] to influence agent behavior. A zero
 // value is a no-op that lets execution proceed.
