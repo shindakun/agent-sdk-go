@@ -159,6 +159,12 @@ func TestE2ESetPermissionMode(t *testing.T) {
 
 // --- Hooks (mirrors test_hooks.py / test_hook_events.py) ---------------------
 
+// On Windows the model can run a shell command with PowerShell instead of Bash,
+// so the shell-dependent hook tests accept either tool (upstream e0da9b9).
+var shellTools = []string{"Bash", "PowerShell"}
+
+const shellMatcher = "Bash|PowerShell"
+
 func TestE2EHookFires(t *testing.T) {
 	e2eSkip(t)
 	ctx, cancel := e2eCtx(t)
@@ -169,9 +175,9 @@ func TestE2EHookFires(t *testing.T) {
 		return HookOutput{}, nil
 	}
 	for _, err := range Query(ctx, "Run `echo hi` with the Bash tool.",
-		WithAllowedTools("Bash"), WithPermissionMode(PermissionBypass),
+		WithAllowedTools(shellTools...), WithPermissionMode(PermissionBypass),
 		WithHooks(map[HookEvent][]HookMatcher{
-			HookPreToolUse: {{Matcher: "Bash", Callbacks: []HookCallback{hook}}},
+			HookPreToolUse: {{Matcher: shellMatcher, Callbacks: []HookCallback{hook}}},
 		}),
 	) {
 		if err != nil {
@@ -190,7 +196,7 @@ func TestE2EHookPermissionDecisionDeny(t *testing.T) {
 	var blocked atomic.Bool
 	hook := func(ctx context.Context, input json.RawMessage, toolUseID string) (HookOutput, error) {
 		in, _ := DecodePreToolUse(input)
-		if in.ToolName == "Bash" {
+		if slices.Contains(shellTools, in.ToolName) {
 			blocked.Store(true)
 			return HookOutput{
 				SystemMessage:      "blocked by hook",
@@ -200,9 +206,9 @@ func TestE2EHookPermissionDecisionDeny(t *testing.T) {
 		return HookOutput{}, nil
 	}
 	for _, err := range Query(ctx, "Use the Bash tool to run `echo hi`.",
-		WithAllowedTools("Bash"),
+		WithAllowedTools(shellTools...),
 		WithHooks(map[HookEvent][]HookMatcher{
-			HookPreToolUse: {{Matcher: "Bash", Callbacks: []HookCallback{hook}}},
+			HookPreToolUse: {{Matcher: shellMatcher, Callbacks: []HookCallback{hook}}},
 		}),
 	) {
 		if err != nil {
@@ -228,10 +234,10 @@ func TestE2EMultipleHooks(t *testing.T) {
 		return HookOutput{}, nil
 	}
 	for _, err := range Query(ctx, "Run `echo hi` with Bash.",
-		WithAllowedTools("Bash"), WithPermissionMode(PermissionBypass),
+		WithAllowedTools(shellTools...), WithPermissionMode(PermissionBypass),
 		WithHooks(map[HookEvent][]HookMatcher{
-			HookPreToolUse:  {{Matcher: "Bash", Callbacks: []HookCallback{preCB}}},
-			HookPostToolUse: {{Matcher: "Bash", Callbacks: []HookCallback{postCB}}},
+			HookPreToolUse:  {{Matcher: shellMatcher, Callbacks: []HookCallback{preCB}}},
+			HookPostToolUse: {{Matcher: shellMatcher, Callbacks: []HookCallback{postCB}}},
 		}),
 	) {
 		if err != nil {

@@ -5,6 +5,18 @@ All notable changes to this project are documented here. The format is based on
 
 ## Unreleased
 
+### Changed
+
+- `SupportedCLIVersion` is now `2.1.319` (upstream CLI bumps `ef1fc07` 2.1.317,
+  `144b7c9` 2.1.318 and `407dadb` 2.1.319,
+  [#61](https://github.com/shindakun/agent-sdk-go/issues/61)). The unit suite
+  and all ten integration tests pass against the real 2.1.319 binary. The one
+  upstream SDK-source change in the window, `d38e51e` (`HookMatcher`
+  `on_failure`), is tracked in
+  [#60](https://github.com/shindakun/agent-sdk-go/issues/60).
+- The e2e hook tests accept either shell tool (`Bash|PowerShell`), since the
+  model can pick PowerShell on Windows. Ports upstream `e0da9b9`.
+
 ## [v0.6.1] - 2026-11-02
 
 ### Changed
