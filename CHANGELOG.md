@@ -5,6 +5,21 @@ All notable changes to this project are documented here. The format is based on
 
 ## Unreleased
 
+### Added
+
+- **`HookMatcher.OnFailure`** (`HookOnFailureContinue` / `HookOnFailureBlock`)
+  sets what happens when a hook callback fails. With `HookOnFailureBlock`, a
+  callback that returns an error or panics, or returns a value the CLI rejects,
+  blocks the action instead of counting as no decision, so a PreToolUse guard
+  that crashes no longer lets the tool run. It is sent as `onFailure` on the
+  matcher in `initialize`. When any matcher sets anything but `"continue"`,
+  connecting fails with a `ConnectionError` if the CLI does not report
+  `hook_on_failure_supported` (a CLI too old to honor it would fail open) or
+  reports `hooks_applied: false`. Verified against CLI 2.1.319: a failing
+  PreToolUse hook lets a Bash command run when unset and blocks it with
+  `HookOnFailureBlock` (`TestIntegrationHookOnFailureBlock`). Ports upstream
+  `d38e51e` ([#60](https://github.com/shindakun/agent-sdk-go/issues/60)).
+
 ### Changed
 
 - `SupportedCLIVersion` is now `2.1.319` (upstream CLI bumps `ef1fc07` 2.1.317,
@@ -12,8 +27,7 @@ All notable changes to this project are documented here. The format is based on
   [#61](https://github.com/shindakun/agent-sdk-go/issues/61)). The unit suite
   and all ten integration tests pass against the real 2.1.319 binary. The one
   upstream SDK-source change in the window, `d38e51e` (`HookMatcher`
-  `on_failure`), is tracked in
-  [#60](https://github.com/shindakun/agent-sdk-go/issues/60).
+  `on_failure`), is listed under Added.
 - The e2e hook tests accept either shell tool (`Bash|PowerShell`), since the
   model can pick PowerShell on Windows. Ports upstream `e0da9b9`.
 

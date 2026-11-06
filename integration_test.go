@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -556,4 +557,45 @@ func (b *lockedBuffer) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.buf.String()
+}
+
+// TestIntegrationHookOnFailureBlock checks HookMatcher.OnFailure against the
+// real CLI: a PreToolUse hook whose callback fails lets the Bash command run
+// when OnFailure is unset (a failure is no decision), and blocks it with
+// HookOnFailureBlock. Ports the behavior upstream d38e51e verified.
+func TestIntegrationHookOnFailureBlock(t *testing.T) {
+	skipIfNoCLI(t)
+	failing := func(ctx context.Context, input json.RawMessage, toolUseID string) (HookOutput, error) {
+		return HookOutput{}, errors.New("policy service down")
+	}
+	ran := func(t *testing.T, onFailure HookOnFailure) bool {
+		t.Helper()
+		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+		defer cancel()
+		dir := t.TempDir()
+		target := filepath.Join(dir, "ran.txt")
+		for _, err := range Query(ctx,
+			"Run exactly this with the Bash tool: touch "+target+" . If it is blocked, do not retry; reply DONE.",
+			WithCwd(dir),
+			WithSettingSources(),
+			WithAllowedTools("Bash"),
+			WithPermissionMode(PermissionBypass),
+			WithMaxTurns(3),
+			WithHooks(map[HookEvent][]HookMatcher{
+				HookPreToolUse: {{Matcher: "Bash", Callbacks: []HookCallback{failing}, OnFailure: onFailure}},
+			}),
+		) {
+			if err != nil {
+				t.Fatalf("query: %v", err)
+			}
+		}
+		_, statErr := os.Stat(target)
+		return statErr == nil
+	}
+	if !ran(t, "") {
+		t.Skip("control: the command did not run with OnFailure unset, so the block run proves nothing")
+	}
+	if ran(t, HookOnFailureBlock) {
+		t.Error("OnFailure block: the Bash command ran although its PreToolUse hook failed")
+	}
 }
