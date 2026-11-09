@@ -33,7 +33,9 @@ type HookCallback func(ctx context.Context, input json.RawMessage, toolUseID str
 type HookMatcher struct {
 	Matcher   string
 	Callbacks []HookCallback
-	Timeout   time.Duration
+	// Timeout bounds each callback in this matcher (the CLI default is 60
+	// seconds). It is sent to the CLI in seconds.
+	Timeout time.Duration
 	// OnFailure is what happens when a callback in this matcher fails. With
 	// [HookOnFailureBlock], a callback that returns an error, or a value the
 	// CLI rejects (such as permissionDecision "Deny"), blocks the action, so a

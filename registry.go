@@ -44,7 +44,8 @@ func (r *callbackRegistry) build(opts *Options) (json.RawMessage, error) {
 				entry["matcher"] = m.Matcher
 			}
 			if m.Timeout > 0 {
-				entry["timeout"] = int(m.Timeout.Milliseconds())
+				// The CLI reads a matcher's timeout in seconds, as upstream sends it.
+				entry["timeout"] = m.Timeout.Seconds()
 			}
 			if m.OnFailure != "" {
 				entry["onFailure"] = m.OnFailure

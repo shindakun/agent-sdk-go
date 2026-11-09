@@ -20,6 +20,16 @@ All notable changes to this project are documented here. The format is based on
   `HookOnFailureBlock` (`TestIntegrationHookOnFailureBlock`). Ports upstream
   `d38e51e` ([#60](https://github.com/shindakun/agent-sdk-go/issues/60)).
 
+### Fixed
+
+- **`HookMatcher.Timeout` is sent to the CLI in seconds.** It was sent in
+  milliseconds, and the CLI reads seconds, so a 30-second timeout asked for
+  30,000 seconds and a slow hook callback was never timed out. Against CLI
+  2.1.319, a callback slower than its 2-second `Timeout` now times out (and,
+  with `HookOnFailureBlock`, blocks the action); before the fix the CLI waited
+  for it (`TestIntegrationHookTimeout`). Upstream sends `HookMatcher.timeout`
+  in seconds.
+
 ### Changed
 
 - `SupportedCLIVersion` is now `2.1.319` (upstream CLI bumps `ef1fc07` 2.1.317,
