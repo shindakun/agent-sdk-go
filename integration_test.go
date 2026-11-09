@@ -599,3 +599,42 @@ func TestIntegrationHookOnFailureBlock(t *testing.T) {
 		t.Error("OnFailure block: the Bash command ran although its PreToolUse hook failed")
 	}
 }
+
+// TestIntegrationHookTimeout checks that HookMatcher.Timeout reaches the CLI
+// in seconds. A PreToolUse callback takes longer than its 2s Timeout, and
+// OnFailure block makes a timeout block the command. Were the timeout sent in
+// another unit (it was once milliseconds, read as 2000 seconds), the CLI would
+// wait for the callback's no-decision answer and the command would run.
+func TestIntegrationHookTimeout(t *testing.T) {
+	skipIfNoCLI(t)
+	slow := func(ctx context.Context, input json.RawMessage, toolUseID string) (HookOutput, error) {
+		select {
+		case <-time.After(15 * time.Second):
+		case <-ctx.Done():
+		}
+		return HookOutput{}, nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+	dir := t.TempDir()
+	target := filepath.Join(dir, "ran.txt")
+	start := time.Now()
+	for _, err := range Query(ctx,
+		"Run exactly this with the Bash tool: touch "+target+" . If it is blocked, do not retry; reply DONE.",
+		WithCwd(dir),
+		WithSettingSources(),
+		WithAllowedTools("Bash"),
+		WithPermissionMode(PermissionBypass),
+		WithMaxTurns(3),
+		WithHooks(map[HookEvent][]HookMatcher{
+			HookPreToolUse: {{Matcher: "Bash", Callbacks: []HookCallback{slow}, Timeout: 2 * time.Second, OnFailure: HookOnFailureBlock}},
+		}),
+	) {
+		if err != nil {
+			t.Fatalf("query: %v", err)
+		}
+	}
+	if _, err := os.Stat(target); err == nil {
+		t.Errorf("the Bash command ran after %v: the 2s hook timeout did not fire", time.Since(start).Round(time.Second))
+	}
+}
